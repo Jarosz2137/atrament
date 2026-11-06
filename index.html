@@ -62,9 +62,9 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; min-height: 100%; background: var(--bg); }
 body {
-  margin: 0; background: var(--bg); color: var(--fg);
+  margin: 0; background: var(--bg); color: var(--fg); min-height: 100vh; min-height: 100lvh;
   font: 15px/1.5 var(--ui);
   padding-top: env(safe-area-inset-top, 0px);
   -webkit-tap-highlight-color: transparent;
@@ -1049,7 +1049,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Wydane przez Atrament: $${(st.spent || 0).toFixed(4)} · wersja 1.1.3</p>`;
+  <p class="hint mono">Wydane przez Atrament: $${(st.spent || 0).toFixed(4)} · wersja 1.1.4</p>`;
 }
 
 /* ============================== Edycja pól ============================== */

@@ -1,5 +1,5 @@
 // Atrament service worker: app shell offline, zero cache dla API.
-const CACHE = 'atrament-v5';
+const CACHE = 'atrament-v6';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
