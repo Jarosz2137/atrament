@@ -1,7 +1,7 @@
 {
   "name": "Atrament",
   "short_name": "Atrament",
-  "description": "Pisanie opowieści z AI, które pamięta postacie i wydarzenia.",
+  "description": "Atrament by Egzey DevCorp. Pisanie opowieści z AI, które pamięta postacie i wydarzenia.",
   "lang": "pl",
   "start_url": "./",
   "scope": "./",

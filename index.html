@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Atrament</title>
-<meta name="description" content="Pisanie opowieści z AI, które pamięta postacie i wydarzenia.">
+<meta name="description" content="Atrament by Egzey DevCorp. Pisanie opowieści z AI, które pamięta postacie i wydarzenia.">
+<meta name="author" content="Egzey DevCorp">
 <meta name="theme-color" content="#0F1218">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -84,7 +85,8 @@ h1, h2, h3 { text-wrap: balance; margin: 0; }
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 .top-in { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
-.brand { font-family: var(--prose); font-weight: 600; font-size: 19px; letter-spacing: .01em; }
+.brand { font-family: var(--prose); font-weight: 600; font-size: 19px; letter-spacing: .01em; display: flex; flex-direction: column; line-height: 1.1; flex: none; }
+.brand small { font-family: var(--ui); font-size: 10.5px; font-weight: 500; letter-spacing: .06em; color: var(--muted); margin-top: 2px; }
 .proj-btn {
   margin-left: auto; min-width: 0; max-width: 62%;
   display: flex; align-items: center; gap: 6px;
@@ -303,7 +305,7 @@ a { color: var(--accent); }
 </head>
 <body>
 <header class="top"><div class="top-in">
-  <span class="brand">Atrament</span>
+  <span class="brand">Atrament<small>by Egzey DevCorp</small></span>
   <button class="proj-btn" data-a="openProjects" aria-label="Zmień projekt"><span id="projName">…</span></button>
 </div></header>
 
@@ -1049,7 +1051,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Wydane przez Atrament: $${(st.spent || 0).toFixed(4)} · wersja 1.1.5</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.1.6 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */

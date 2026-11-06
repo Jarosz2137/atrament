@@ -1,4 +1,4 @@
-# Atrament
+# Atrament by Egzey DevCorp
 
 Pisanie opowieści z AI, które pamięta postacie, wydarzenia i otwarte wątki. Działa jako apka na iPhonie (PWA) bez App Store i bez serwera: dane trzymasz na telefonie, a zapytania idą prosto do API modeli.
 
