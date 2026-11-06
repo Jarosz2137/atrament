@@ -507,7 +507,15 @@ function httpError(status, text) {
     408: 'Model nie odpowiedział na czas. Spróbuj ponownie.', 413: 'Za długi tekst dla tego modelu.', 429: 'Limit zapytań. Odczekaj chwilę albo zmień model.',
     500: 'Błąd po stronie dostawcy. Spróbuj ponownie.', 502: 'Dostawca modelu nie odpowiada. Spróbuj ponownie.', 503: 'Brak dostępnego dostawcy dla tego modelu. Spróbuj za chwilę.',
   };
-  const e = new UserError((map[status] || ('Błąd ' + status + '.')) + (m ? ' Szczegóły: ' + m : ''));
+  if (status === 429 && /limit: ?0\b|free_tier|FreeTier/i.test(text || '')) {
+    const e0 = new UserError('Ten model nie jest dostępny na darmowym kluczu (limit 0). Włącz Billing w projekcie Google Cloud, z którego jest klucz, albo przełącz jakość na „Taniej”. Szczegóły: ' + m.slice(0, 200));
+    e0.status = 429; return e0;
+  }
+  if (status === 429 && /quota|RESOURCE_EXHAUSTED|insufficient_quota|billing/i.test(text || '')) {
+    const e1 = new UserError('Wyczerpany limit albo brak środków na koncie tego dostawcy. Sprawdź billing albo odczekaj. Szczegóły: ' + m.slice(0, 200));
+    e1.status = 429; return e1;
+  }
+  const e = new UserError((map[status] || ('Błąd ' + status + '.')) + (m ? ' Szczegóły: ' + m.slice(0, 300) : ''));
   e.status = status; return e;
 }
 
