@@ -13,6 +13,16 @@ Pisanie opowieści z AI, które pamięta postacie, wydarzenia i otwarte wątki. 
 
 Repo może być publiczne, bo w kodzie nie ma żadnych kluczy ani tekstów. Wszystko zapisuje się dopiero na Twoim telefonie.
 
+## Dostawcy modeli
+
+Każdej roli (pisarz, redaktor, archiwista) przypisujesz dostawcę osobno:
+- **OpenRouter**: jeden klucz do setek modeli, w tym darmowych (`:free`).
+- **Claude API (Anthropic)**: klucz z platform.claude.com. Anthropic nie trenuje na danych z API.
+- **Kimi API (Moonshot)**: klucz z platform.moonshot.ai. Regulamin Moonshot dopuszcza używanie treści z API do ulepszania usług.
+- **Własny endpoint** zgodny z OpenAI (Groq, Fireworks, Twój model).
+
+Gotowy zestaw: Kimi pisze, Claude Sonnet redaguje, Claude Haiku prowadzi pamięć.
+
 ## Jak to działa
 
 - **Pisarz** (domyślnie Kimi K3): pisze sceny, pomysły i alternatywne zakończenia.

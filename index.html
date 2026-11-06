@@ -382,7 +382,7 @@ const DB = {
 
 /* ============================== Stan ============================== */
 const DEFAULT_SETTINGS = {
-  orKey: '', customBase: '', customKey: '', customName: 'Własny endpoint',
+  orKey: '', anKey: '', msKey: '', customBase: '', customKey: '', customName: 'Własny endpoint',
   roles: {
     writer: { provider: 'openrouter', model: 'moonshotai/kimi-k3', temp: 0.8 },
     editor: { provider: 'openrouter', model: 'google/gemini-3.8-flash', temp: 0.2 },
@@ -506,12 +506,76 @@ function httpError(status, text) {
   e.status = status; return e;
 }
 
+const KIMI_MODELS = [
+  { id: 'kimi-k3', name: 'Kimi K3', note: '$3 / $15 za 1M tokenów, kontekst 1M.' },
+  { id: 'kimi-k3.1-pro', name: 'Kimi K3.1 Pro', note: 'Nowsza wersja. Cenę sprawdź na platform.moonshot.ai.' },
+];
+const CLAUDE_MODELS = [
+  { id: 'claude-sonnet-5-5', name: 'Claude Sonnet 5.5', pin: 2, pout: 10, note: 'Najlepszy stosunek jakości do ceny. Dobry start dla pisarza i redaktora.' },
+  { id: 'claude-opus-5-5', name: 'Claude Opus 5.5', pin: 4, pout: 20, note: 'Mocniejszy przy długiej, złożonej fabule.' },
+  { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5', pin: 0.1, pout: 0.5, note: 'Tani i szybki. Dobry na archiwistę.' },
+  { id: 'claude-fable-5-1', name: 'Claude Fable 5.1', pin: 10, pout: 50, note: 'Najmocniejszy i najdroższy.' },
+];
+async function llmAnthropic(role, messages, opt) {
+  const st = S.settings, r = st.roles[role], key = (st.anKey || '').trim();
+  if (!key) throw new UserError('Brak klucza Claude API. Dodaj go w Ustawieniach.');
+  const sys = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
+  const msgs = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role, content: m.content }));
+  const body = { model: r.model, max_tokens: opt.maxTokens || (role === 'editor' ? 16000 : 8000), messages: msgs, stream: !!opt.stream, temperature: Math.min(1, opt.temp ?? r.temp) };
+  if (sys) body.system = [{ type: 'text', text: sys, cache_control: { type: 'ephemeral' } }];
+  if (opt.json) body.messages[body.messages.length - 1].content += '\n\nOdpowiedz wyłącznie obiektem JSON, bez żadnego tekstu przed ani po.';
+  const headers = { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' };
+  const send = b => fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers, body: JSON.stringify(b), signal: opt.signal });
+  let res;
+  try { res = await send(body); }
+  catch (e) { if (e.name === 'AbortError') throw e; throw new UserError('Brak połączenia z Claude API. Sprawdź internet.'); }
+  if (res.status === 400) {
+    const t = await res.clone().text().catch(() => '');
+    if (/temperature/i.test(t)) { delete body.temperature; res = await send(body); }
+  }
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    if (res.status === 529) throw new UserError('Claude jest teraz przeciążony. Spróbuj za chwilę.');
+    if (res.status === 401) throw new UserError('Nieprawidłowy klucz Claude API. Sprawdź go w Ustawieniach.');
+    if (res.status === 400 && /credit|balance/i.test(t)) throw new UserError('Brak środków na koncie Claude API. Doładuj je w Console (Billing).');
+    throw httpError(res.status, t);
+  }
+  let text = '', inTok = 0, outTok = 0, cacheR = 0, cacheW = 0;
+  const takeUsage = u => { if (!u) return; if (u.input_tokens != null) inTok = u.input_tokens; if (u.output_tokens != null) outTok = u.output_tokens; if (u.cache_read_input_tokens != null) cacheR = u.cache_read_input_tokens; if (u.cache_creation_input_tokens != null) cacheW = u.cache_creation_input_tokens; };
+  if (opt.stream && res.body) {
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true }); let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        let j; try { j = JSON.parse(line.slice(5).trim()); } catch { continue; }
+        if (j.type === 'error') throw new UserError('Claude przerwał: ' + (j.error?.message || 'nieznany błąd'));
+        if (j.type === 'message_start') takeUsage(j.message?.usage);
+        if (j.type === 'message_delta') takeUsage(j.usage);
+        if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') { text += j.delta.text; opt.onDelta?.(text); }
+      }
+    }
+  } else {
+    const j = await res.json();
+    text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+    takeUsage(j.usage);
+  }
+  const m = CLAUDE_MODELS.find(x => r.model.startsWith(x.id));
+  const cost = m ? ((inTok + cacheW * 1.25 + cacheR * 0.1) * m.pin + outTok * m.pout) / 1e6 : null;
+  if (cost) { st.spent = (st.spent || 0) + cost; saveSettings(); }
+  return { text, usage: { prompt_tokens: inTok + cacheR + cacheW, completion_tokens: outTok, cost }, model: r.model };
+}
+
 async function llm(role, messages, opt = {}) {
   const st = S.settings, r = st.roles[role];
-  const isOR = r.provider === 'openrouter';
-  const base = isOR ? 'https://openrouter.ai/api/v1' : (st.customBase || '').trim().replace(/\/+$/, '');
-  const key = isOR ? st.orKey.trim() : (st.customKey || '').trim();
+  if (r.provider === 'anthropic') return llmAnthropic(role, messages, opt);
+  const isOR = r.provider === 'openrouter', isMS = r.provider === 'moonshot';
+  const base = isOR ? 'https://openrouter.ai/api/v1' : isMS ? 'https://api.moonshot.ai/v1' : (st.customBase || '').trim().replace(/\/+$/, '');
+  const key = isOR ? st.orKey.trim() : isMS ? (st.msKey || '').trim() : (st.customKey || '').trim();
   if (isOR && !key) throw new UserError('Brak klucza OpenRouter. Dodaj go w Ustawieniach.');
+  if (isMS && !key) throw new UserError('Brak klucza Moonshot (Kimi). Dodaj go w Ustawieniach.');
   if (!isOR && !base) throw new UserError('Brak adresu własnego endpointu. Uzupełnij go w Ustawieniach.');
   if (!r.model) throw new UserError('Nie wybrano modelu dla roli: ' + ROLE_INFO[role].name + '.');
 
@@ -865,6 +929,8 @@ function render() {
 
 function keyBanner() {
   const w = S.settings.roles.writer;
+  if (w.provider === 'moonshot' && !S.settings.msKey) return `<div class="banner info"><div><b>Dodaj klucz Kimi API</b>, żeby generować sceny.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
+  if (w.provider === 'anthropic' && !S.settings.anKey) return `<div class="banner info"><div><b>Dodaj klucz Claude API</b>, żeby generować sceny.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
   if (w.provider === 'openrouter' && !S.settings.orKey) return `<div class="banner info"><div><b>Dodaj klucz OpenRouter</b>, żeby generować sceny. Jeden klucz daje dostęp do Kimi i wszystkich innych modeli.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
   return '';
 }
@@ -1006,14 +1072,26 @@ function viewSettings() {
     return `<div class="card"><div><h3>${I.name}</h3><span class="hint">${I.desc}</span></div>
       <div class="row"><label class="field grow"><span>Dostawca</span><select id="prov_${role}" data-f="role_${role}.provider">
         <option value="openrouter" ${r.provider === 'openrouter' ? 'selected' : ''}>OpenRouter</option>
+        <option value="anthropic" ${r.provider === 'anthropic' ? 'selected' : ''}>Claude API (Anthropic)</option>
+        <option value="moonshot" ${r.provider === 'moonshot' ? 'selected' : ''}>Kimi API (Moonshot)</option>
         <option value="custom" ${r.provider === 'custom' ? 'selected' : ''}>${esc(st.customName || 'Własny endpoint')}</option></select></label></div>
       <label class="field"><span>Model</span><div class="row"><input class="grow mono" type="text" id="model_${role}" data-f="role_${role}.model" value="${esc(r.model)}" autocapitalize="off" autocorrect="off" spellcheck="false">
-        ${r.provider === 'openrouter' ? `<button class="btn" data-a="pickModel" data-id="${role}">Wybierz</button>` : ''}</div></label>
+        ${r.provider !== 'custom' ? `<button class="btn" data-a="pickModel" data-id="${role}">Wybierz</button>` : ''}</div></label>
       <label class="field"><span>Temperatura: <b id="tv_${role}">${r.temp}</b></span><input type="range" id="temp_${role}" min="0" max="1.3" step="0.05" value="${r.temp}" data-f="role_${role}.temp"></label>
     </div>`;
   };
   const sft = p?.dataset.sft.length || 0, dpo = p?.dataset.dpo.length || 0;
   return `<h2 class="sec">Ustawienia</h2>
+  <div class="card">
+    <label class="field"><span>Klucz Claude API</span><input type="password" id="anKey" data-f="settings.anKey" value="${esc(st.anKey || '')}" placeholder="sk-ant-…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <span class="hint">Klucz założysz w Claude Console: <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a> (wymaga doładowania w Billing). Anthropic nie trenuje modeli na danych z API. Potem przy roli wybierz dostawcę „Claude API”.</span>
+    <button class="btn" data-a="useClaudeAll">Ustaw Claude dla wszystkich ról</button>
+  </div>
+  <div class="card">
+    <label class="field"><span>Klucz Kimi API (Moonshot)</span><input type="password" id="msKey" data-f="settings.msKey" value="${esc(st.msKey || '')}" placeholder="sk-…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <span class="hint">Klucz z <a href="https://platform.moonshot.ai" target="_blank" rel="noopener">platform.moonshot.ai</a> → API Keys. Uwaga: regulamin Moonshot pozwala im używać treści z API do ulepszania usług, chyba że masz osobną umowę. Przełącznik prywatności z OpenRouter tu nie działa.</span>
+    <button class="btn" data-a="useKimiWriter">Kimi jako pisarz, Claude jako redaktor i archiwista</button>
+  </div>
   <div class="card">
     <label class="field"><span>Klucz OpenRouter</span><input type="password" id="orKey" data-f="settings.orKey" value="${esc(st.orKey)}" placeholder="sk-or-…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
     <span class="hint">Klucz założysz na <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Zostaje tylko na tym urządzeniu.</span>
@@ -1051,7 +1129,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.1.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1082,7 +1160,13 @@ document.addEventListener('input', e => {
   if (scope === 'settings' || scope.startsWith('role_')) {
     saveSettings();
     if (el.type === 'range') { const t = $('#tv_' + scope.slice(5)); if (t) t.textContent = v; }
-    if (key === 'provider') render();
+    if (key === 'provider') {
+      const isClaude = /^claude-/.test(obj.model);
+      if (v === 'anthropic' && !isClaude) obj.model = scope === 'role_memory' ? 'claude-haiku-5-5' : 'claude-sonnet-5-5';
+      if (v === 'moonshot') obj.model = 'kimi-k3';
+      if (v === 'openrouter' && isClaude) obj.model = DEFAULT_SETTINGS.roles[scope.slice(5)].model;
+      render();
+    }
   } else saveProject();
   if (scope === 'project' && key === 'title') $('#projName').textContent = v;
   if (scope === 'scene' && key === 'text') updateTicBanner();
@@ -1526,6 +1610,14 @@ async function loadModels() {
 }
 A.pickModel = async role => {
   S.ui = { role };
+  if (S.settings.roles[role].provider === 'moonshot') {
+    openSheet('Model: ' + ROLE_INFO[role].name, KIMI_MODELS.map(m => `<button class="model-row" data-a="setModel" data-id="${m.id}"><span>${esc(m.name)}</span><span class="mono">${m.id}</span><span class="small muted">${esc(m.note)}</span></button>`).join('') + '<span class="hint">Inny model wpiszesz ręcznie w polu Model.</span>');
+    return;
+  }
+  if (S.settings.roles[role].provider === 'anthropic') {
+    openSheet('Model: ' + ROLE_INFO[role].name, CLAUDE_MODELS.map(m => `<button class="model-row" data-a="setModel" data-id="${m.id}"><span>${esc(m.name)}</span><span class="mono">${m.id} · $${m.pin} / $${m.pout} za 1M</span><span class="small muted">${esc(m.note)}</span></button>`).join(''));
+    return;
+  }
   openSheet('Model: ' + ROLE_INFO[role].name, `<input type="search" id="modelSearch" placeholder="Szukaj: kimi, gemini, claude, qwen…" autocapitalize="off" autocorrect="off"><div id="modelList">${loader('Pobieram listę modeli…')}</div>`);
   try { await loadModels(); renderModelList(''); } catch (e) { $('#modelList').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
 };
@@ -1537,6 +1629,20 @@ function renderModelList(q) {
   if (!t) list = list.sort((a, b) => (sugg.findIndex(s => a.id.startsWith(s)) + 1 || 99) - (sugg.findIndex(s => b.id.startsWith(s)) + 1 || 99));
   el.innerHTML = list.slice(0, 80).map(m => `<button class="model-row" data-a="setModel" data-id="${esc(m.id)}"><span>${esc(m.name || m.id)}</span><span class="mono">${esc(m.id)} · $${m.pin.toFixed(2)} / $${m.pout.toFixed(2)} za 1M · ${fmtN(m.ctx)} kontekstu</span></button>`).join('') || '<div class="empty">Nic nie znaleziono.</div>';
 }
+A.useKimiWriter = () => {
+  const R = S.settings.roles;
+  R.writer.provider = 'moonshot'; R.writer.model = 'kimi-k3';
+  R.editor.provider = 'anthropic'; R.editor.model = 'claude-sonnet-5-5';
+  R.memory.provider = 'anthropic'; R.memory.model = 'claude-haiku-5-5';
+  saveSettings(); render(); toast('Pisarz: Kimi K3, redaktor: Sonnet 5.5, archiwista: Haiku 5.5.');
+};
+A.useClaudeAll = () => {
+  const R = S.settings.roles;
+  R.writer.provider = 'anthropic'; R.writer.model = 'claude-sonnet-5-5';
+  R.editor.provider = 'anthropic'; R.editor.model = 'claude-sonnet-5-5';
+  R.memory.provider = 'anthropic'; R.memory.model = 'claude-haiku-5-5';
+  saveSettings(); render(); toast('Pisarz i redaktor: Sonnet 5.5, archiwista: Haiku 5.5.');
+};
 A.setModel = id => { S.settings.roles[S.ui.role].model = id; saveSettings(); closeSheet(); render(); toast('Ustawiono ' + id); };
 
 async function saveFile(name, content, type) {
@@ -1561,7 +1667,7 @@ A.exportDPO = () => {
 };
 A.exportBackup = async () => {
   const projects = []; for (const m of S.projects) { const p = await DB.get('p:' + m.id); if (p) projects.push(p); }
-  const { orKey, customKey, ...settings } = S.settings;
+  const { orKey, anKey, msKey, customKey, ...settings } = S.settings;
   saveFile(`atrament-kopia-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'atrament', v: 1, at: Date.now(), settings, projects }), 'application/json');
 };
 A.importBackup = () => $('#fileIn').click();
@@ -1576,7 +1682,7 @@ $('#fileIn').addEventListener('change', async e => {
       if (i >= 0) S.projects[i] = meta; else S.projects.push(meta);
     }
     await DB.set('projects', S.projects);
-    if (j.settings) { const { orKey, customKey } = S.settings; S.settings = { ...DEFAULT_SETTINGS, ...j.settings, roles: { ...DEFAULT_SETTINGS.roles, ...(j.settings.roles || {}) }, orKey, customKey }; saveSettings(); }
+    if (j.settings) { const { orKey, anKey, msKey, customKey } = S.settings; S.settings = { ...DEFAULT_SETTINGS, ...j.settings, roles: { ...DEFAULT_SETTINGS.roles, ...(j.settings.roles || {}) }, orKey, anKey, msKey, customKey }; saveSettings(); }
     if (j.projects[0]) S.project = migrate(await DB.get('p:' + (S.project && j.projects.some(p => p.id === S.project.id) ? S.project.id : j.projects[0].id)));
     S.sceneId = null; render(); toast(`Wczytano ${j.projects.length} opowieści.`);
   } catch (err) { toastErr(err instanceof SyntaxError ? new UserError('Plik jest uszkodzony.') : err); }
