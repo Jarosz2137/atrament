@@ -195,7 +195,11 @@ select { appearance: none; -webkit-appearance: none; padding-right: 30px;
 input.scene-title { font-family: var(--prose); font-size: 20px; font-weight: 600; background: transparent; border: 0; padding: 2px 0; border-bottom: 1px dashed var(--line); border-radius: 0; }
 .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .meta-line { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
-details.plan { display: block; }
+details.plan, details.adv { display: block; }
+details.adv > summary { list-style: none; cursor: pointer; display: flex; align-items: center; }
+details.adv > summary::-webkit-details-marker { display: none; }
+details.adv > summary::after { content: "Pokaż"; margin-left: auto; font-size: 13px; color: var(--accent); }
+details.adv[open] > summary::after { content: "Ukryj"; }
 details.plan > .stack { margin-top: 12px; gap: 12px; }
 details.plan > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
 details.plan > summary::-webkit-details-marker { display: none; }
@@ -382,12 +386,13 @@ const DB = {
 
 /* ============================== Stan ============================== */
 const DEFAULT_SETTINGS = {
-  orKey: '', anKey: '', msKey: '', customBase: '', customKey: '', customName: 'Własny endpoint',
+  orKey: '', anKey: '', msKey: '', oaKey: '', gmKey: '', customBase: '', customKey: '', customName: 'Własny endpoint',
   roles: {
-    writer: { provider: 'openrouter', model: 'moonshotai/kimi-k3', temp: 0.8 },
-    editor: { provider: 'openrouter', model: 'google/gemini-3.8-flash', temp: 0.2 },
-    memory: { provider: 'openrouter', model: 'google/gemini-3.8-flash', temp: 0.2 },
+    writer: { provider: 'anthropic', model: 'claude-sonnet-5-5', temp: 0.8 },
+    editor: { provider: 'anthropic', model: 'claude-sonnet-5-5', temp: 0.2 },
+    memory: { provider: 'anthropic', model: 'claude-haiku-5-5', temp: 0.2 },
   },
+  engine: 'claude', tier: 'best',
   reasoning: 'low', denyTraining: true, zdr: false, lt: true,
   spent: 0, lastProject: null,
 };
@@ -506,6 +511,50 @@ function httpError(status, text) {
   e.status = status; return e;
 }
 
+const PROVIDERS = {
+  anthropic: { name: 'Claude API (Anthropic)', keyField: 'anKey', ph: 'sk-ant-…', keyUrl: 'https://platform.claude.com/settings/keys', privacy: 'Nie trenuje na danych z API. Wymaga doładowania w Billing.' },
+  openai: { name: 'OpenAI (ChatGPT)', base: 'https://api.openai.com/v1', keyField: 'oaKey', ph: 'sk-…', keyUrl: 'https://platform.openai.com/api-keys', privacy: 'Domyślnie nie trenuje na danych z API. Wymaga doładowania.' },
+  gemini: { name: 'Google Gemini', base: 'https://generativelanguage.googleapis.com/v1beta/openai', keyField: 'gmKey', ph: 'AIza…', keyUrl: 'https://aistudio.google.com/apikey', privacy: 'Uwaga: na darmowym kluczu Google trenuje na Twoich tekstach. Po włączeniu płatności (Billing) już nie.' },
+  moonshot: { name: 'Kimi API (Moonshot)', base: 'https://api.moonshot.ai/v1', keyField: 'msKey', ph: 'sk-…', keyUrl: 'https://platform.moonshot.ai', privacy: 'Regulamin pozwala im używać treści z API do ulepszania usług.' },
+  openrouter: { name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', keyField: 'orKey', ph: 'sk-or-…', keyUrl: 'https://openrouter.ai/keys', privacy: 'Pośrednik do setek modeli, także darmowych.' },
+  custom: { name: 'Własny endpoint', keyField: 'customKey' },
+};
+const ENGINES = {
+  claude: { label: 'Claude', prov: 'anthropic', best: ['claude-sonnet-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'], cheap: ['claude-haiku-5-5', 'claude-haiku-5-5', 'claude-haiku-5-5'], note: 'Najlepsza polszczyzna. Ok. 3,5 centa za scenę (Sonnet) albo ułamek centa (Haiku).' },
+  openai: { label: 'ChatGPT', prov: 'openai', best: [['gpt-6-astra', 'gpt-6'], ['gpt-6-luna', 'gpt-6-mini'], ['gpt-6-luna', 'gpt-6-mini']], cheap: [['gpt-6-luna', 'gpt-6-mini'], ['gpt-6-luna', 'gpt-6-mini'], ['gpt-6-luna', 'gpt-5.4-nano']], note: 'Najlepsza jakość (Astra) jest droga: ok. 17 centów za scenę. Tania (Luna) to ułamek centa.' },
+  gemini: { label: 'Gemini', prov: 'gemini', best: ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'], cheap: ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'], note: 'Tani i dobry w polskim. Na darmowym kluczu Google trenuje na tekstach.' },
+  kimi: { label: 'Kimi', prov: 'moonshot', best: ['kimi-k3', 'kimi-k3', 'kimi-k3'], cheap: ['kimi-k3', 'kimi-k3', 'kimi-k3'], note: 'Kreatywny, ale robi błędy w polszczyźnie. Ok. 5 centów za scenę.' },
+  openrouter: { label: 'OpenRouter', prov: 'openrouter', best: ['moonshotai/kimi-k3', 'google/gemini-3.8-flash', 'google/gemini-3.8-flash'], cheap: ['nvidia/nemotron-3-ultra-550b-a55b:free', 'google/gemma-4-31b-it:free', 'google/gemma-4-31b-it:free'], note: 'Tryb tani używa darmowych modeli: wymaga wyłączenia ochrony prywatności w Zaawansowanych.' },
+};
+async function liveModels(prov) {
+  const P = PROVIDERS[prov], key = (S.settings[P.keyField] || '').trim();
+  if (!key || !P.base) return null;
+  try {
+    const r = await fetch(P.base + '/models', { headers: { Authorization: 'Bearer ' + key } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (j.data || []).map(m => String(m.id).replace(/^models\//, ''));
+  } catch { return null; }
+}
+async function applyEngine() {
+  const st = S.settings, E = ENGINES[st.engine] || ENGINES.claude, slots = E[st.tier === 'cheap' ? 'cheap' : 'best'];
+  ['writer', 'editor', 'memory'].forEach((role, i) => { const c = [].concat(slots[i]); st.roles[role].provider = E.prov; st.roles[role].model = c[0]; });
+  if (st.engine === 'openrouter' && st.tier === 'cheap') st.denyTraining = false;
+  if (st.engine === 'openrouter' && st.tier !== 'cheap') st.denyTraining = true;
+  saveSettings(); render();
+  if (E.prov === 'openai' || E.prov === 'gemini') {
+    const ids = await liveModels(E.prov);
+    if (!ids) return;
+    ['writer', 'editor', 'memory'].forEach((role, i) => {
+      const c = [].concat(slots[i]);
+      const hit = c.find(x => ids.includes(x)) || c.map(x => ids.find(id => id.startsWith(x))).find(Boolean);
+      const fallback = E.prov === 'openai' ? ids.filter(id => /^gpt-/.test(id) && !/audio|realtime|image|search|transcribe|tts/.test(id)).sort().reverse()[0] : ids.find(id => /flash/.test(id));
+      st.roles[role].model = hit || fallback || st.roles[role].model;
+    });
+    saveSettings(); render();
+  }
+}
+const DEFAULT_MODEL = { openai: '', gemini: 'gemini-3.8-flash', moonshot: 'kimi-k3' };
 const KIMI_MODELS = [
   { id: 'kimi-k3', name: 'Kimi K3', note: '$3 / $15 za 1M tokenów, kontekst 1M.' },
   { id: 'kimi-k3.1-pro', name: 'Kimi K3.1 Pro', note: 'Nowsza wersja. Cenę sprawdź na platform.moonshot.ai.' },
@@ -571,16 +620,17 @@ async function llmAnthropic(role, messages, opt) {
 async function llm(role, messages, opt = {}) {
   const st = S.settings, r = st.roles[role];
   if (r.provider === 'anthropic') return llmAnthropic(role, messages, opt);
-  const isOR = r.provider === 'openrouter', isMS = r.provider === 'moonshot';
-  const base = isOR ? 'https://openrouter.ai/api/v1' : isMS ? 'https://api.moonshot.ai/v1' : (st.customBase || '').trim().replace(/\/+$/, '');
-  const key = isOR ? st.orKey.trim() : isMS ? (st.msKey || '').trim() : (st.customKey || '').trim();
-  if (isOR && !key) throw new UserError('Brak klucza OpenRouter. Dodaj go w Ustawieniach.');
-  if (isMS && !key) throw new UserError('Brak klucza Moonshot (Kimi). Dodaj go w Ustawieniach.');
-  if (!isOR && !base) throw new UserError('Brak adresu własnego endpointu. Uzupełnij go w Ustawieniach.');
+  const P = PROVIDERS[r.provider] || PROVIDERS.custom;
+  const isOR = r.provider === 'openrouter', isOA = r.provider === 'openai';
+  const base = (P.base || st.customBase || '').trim().replace(/\/+$/, '');
+  const key = (st[P.keyField] || '').trim();
+  if (P.base && !key) throw new UserError('Brak klucza ' + P.name + '. Dodaj go w Ustawieniach.');
+  if (!base) throw new UserError('Brak adresu własnego endpointu. Uzupełnij go w Ustawieniach.');
   if (!r.model) throw new UserError('Nie wybrano modelu dla roli: ' + ROLE_INFO[role].name + '.');
 
   const body = { model: r.model, messages, temperature: opt.temp ?? r.temp, stream: !!opt.stream };
-  if (opt.maxTokens) body.max_tokens = opt.maxTokens;
+  if (opt.maxTokens) body[isOA ? 'max_completion_tokens' : 'max_tokens'] = opt.maxTokens;
+  if (isOA && opt.stream) body.stream_options = { include_usage: true };
   if (opt.json) body.response_format = { type: 'json_object' };
   if (isOR) {
     body.provider = {};
@@ -596,10 +646,18 @@ async function llm(role, messages, opt = {}) {
   const send = b => fetch(base + '/chat/completions', { method: 'POST', headers, body: JSON.stringify(b), signal: opt.signal });
   let res;
   try { res = await send(body); }
-  catch (e) { if (e.name === 'AbortError') throw e; throw new UserError('Brak połączenia z ' + (isOR ? 'OpenRouter' : base) + '. Sprawdź internet' + (isOR ? '.' : ' i czy endpoint pozwala na zapytania z przeglądarki (CORS).')); }
-  if (res.status === 400 && (body.reasoning || body.response_format)) {
-    // część modeli nie zna tych parametrów: ponów bez nich
-    delete body.reasoning; delete body.response_format;
+  catch (e) { if (e.name === 'AbortError') throw e; throw new UserError('Brak połączenia z ' + P.name + '. Sprawdź internet' + (P.base ? '.' : ' i czy endpoint pozwala na zapytania z przeglądarki (CORS).')); }
+  for (let tries = 0; res.status === 400 && tries < 3; tries++) {
+    // część modeli nie zna niektórych parametrów: usuń ten, na który narzeka, i ponów
+    const t = await res.clone().text().catch(() => '');
+    let changed = false;
+    if (/temperature/i.test(t) && 'temperature' in body) { delete body.temperature; changed = true; }
+    if (/max_tokens/i.test(t) && body.max_tokens) { body.max_completion_tokens = body.max_tokens; delete body.max_tokens; changed = true; }
+    if (/response_format|json/i.test(t) && body.response_format) { delete body.response_format; changed = true; }
+    if (/reasoning/i.test(t) && body.reasoning) { delete body.reasoning; changed = true; }
+    if (/stream_options/i.test(t) && body.stream_options) { delete body.stream_options; changed = true; }
+    if (!changed && (body.reasoning || body.response_format)) { delete body.reasoning; delete body.response_format; changed = true; }
+    if (!changed) break;
     res = await send(body);
   }
   if (!res.ok) throw httpError(res.status, await res.text().catch(() => ''));
@@ -928,10 +986,10 @@ function render() {
 }
 
 function keyBanner() {
-  const w = S.settings.roles.writer;
-  if (w.provider === 'moonshot' && !S.settings.msKey) return `<div class="banner info"><div><b>Dodaj klucz Kimi API</b>, żeby generować sceny.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
+  const w = S.settings.roles.writer, P = PROVIDERS[w.provider];
+  if (P && P.base !== undefined && w.provider !== 'custom' && !S.settings[P.keyField]) return `<div class="banner info"><div><b>Dodaj klucz ${esc(P.name)}</b>, żeby generować sceny, albo wybierz innego dostawcę dla pisarza.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
   if (w.provider === 'anthropic' && !S.settings.anKey) return `<div class="banner info"><div><b>Dodaj klucz Claude API</b>, żeby generować sceny.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
-  if (w.provider === 'openrouter' && !S.settings.orKey) return `<div class="banner info"><div><b>Dodaj klucz OpenRouter</b>, żeby generować sceny. Jeden klucz daje dostęp do Kimi i wszystkich innych modeli.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
+  if (!w.model) return `<div class="banner info"><div><b>Wybierz model pisarza</b> w Ustawieniach.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
   return '';
 }
 
@@ -968,7 +1026,8 @@ function viewScene(p, sc) {
     <div class="field"><span>Kto jest w scenie</span><div class="chips">${chips}</div>
       ${p.characters.length ? '<div><button class="btn ghost sm" data-a="detectWho">Wykryj z planu</button></div>' : ''}</div>
     <div class="row"><label class="field grow"><span>Zakończenie</span><select id="sceneEnding" data-f="scene.ending">${endOpts}</select></label>
-      <label class="field grow"><span>Długość</span><select id="sceneWords" data-f="scene.words">${lenOpts}</select></label></div>
+      <label class="field grow"><span>Długość</span><select id="sceneWords" data-f="scene.words">${lenOpts}</select></label>
+      <label class="field grow"><span>Model</span><select id="engineQuick">${Object.entries(ENGINES).map(([k, e]) => `<option value="${k}" ${S.settings.engine === k ? 'selected' : ''}>${e.label}${S.settings[PROVIDERS[e.prov].keyField] ? '' : ' (brak klucza)'}</option>`).join('')}</select></label></div>
     <div class="row">
       <button class="btn primary grow" data-a="generate" ${busy ? 'disabled' : ''}>${hasText ? 'Napisz od nowa' : 'Napisz scenę'}</button>
       <button class="btn grow" data-a="ideas" ${busy ? 'disabled' : ''}>Pomysły</button>
@@ -1071,34 +1130,31 @@ function viewSettings() {
     const r = st.roles[role], I = ROLE_INFO[role];
     return `<div class="card"><div><h3>${I.name}</h3><span class="hint">${I.desc}</span></div>
       <div class="row"><label class="field grow"><span>Dostawca</span><select id="prov_${role}" data-f="role_${role}.provider">
-        <option value="openrouter" ${r.provider === 'openrouter' ? 'selected' : ''}>OpenRouter</option>
-        <option value="anthropic" ${r.provider === 'anthropic' ? 'selected' : ''}>Claude API (Anthropic)</option>
-        <option value="moonshot" ${r.provider === 'moonshot' ? 'selected' : ''}>Kimi API (Moonshot)</option>
-        <option value="custom" ${r.provider === 'custom' ? 'selected' : ''}>${esc(st.customName || 'Własny endpoint')}</option></select></label></div>
+        ${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${r.provider === k ? 'selected' : ''}>${esc(k === 'custom' ? (st.customName || v.name) : v.name)}</option>`).join('')}</select></label></div>
       <label class="field"><span>Model</span><div class="row"><input class="grow mono" type="text" id="model_${role}" data-f="role_${role}.model" value="${esc(r.model)}" autocapitalize="off" autocorrect="off" spellcheck="false">
         ${r.provider !== 'custom' ? `<button class="btn" data-a="pickModel" data-id="${role}">Wybierz</button>` : ''}</div></label>
       <label class="field"><span>Temperatura: <b id="tv_${role}">${r.temp}</b></span><input type="range" id="temp_${role}" min="0" max="1.3" step="0.05" value="${r.temp}" data-f="role_${role}.temp"></label>
     </div>`;
   };
   const sft = p?.dataset.sft.length || 0, dpo = p?.dataset.dpo.length || 0;
+  const E = ENGINES[st.engine] || ENGINES.claude, EP = PROVIDERS[E.prov];
+  const keyInput = k => { const v = PROVIDERS[k]; return `<label class="field"><span>Klucz ${esc(v.name)}</span><input type="password" id="key_${k}" data-f="settings.${v.keyField}" value="${esc(st[v.keyField] || '')}" placeholder="${v.ph}" autocomplete="off" autocapitalize="off" spellcheck="false"></label><span class="hint">Załóż na <a href="${v.keyUrl}" target="_blank" rel="noopener">${v.keyUrl.replace('https://', '')}</a>. ${v.privacy}</span>`; };
+  const R = st.roles;
   return `<h2 class="sec">Ustawienia</h2>
   <div class="card">
-    <label class="field"><span>Klucz Claude API</span><input type="password" id="anKey" data-f="settings.anKey" value="${esc(st.anKey || '')}" placeholder="sk-ant-…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-    <span class="hint">Klucz założysz w Claude Console: <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a> (wymaga doładowania w Billing). Anthropic nie trenuje modeli na danych z API. Potem przy roli wybierz dostawcę „Claude API”.</span>
-    <button class="btn" data-a="useClaudeAll">Ustaw Claude dla wszystkich ról</button>
+    <div class="label">Model</div>
+    <div class="chips">${Object.entries(ENGINES).map(([k, e]) => `<button class="chip" data-a="setEngine" data-id="${k}" aria-pressed="${st.engine === k}">${e.label}</button>`).join('')}</div>
+    <div class="seg" role="group" aria-label="Jakość"><button data-a="setTier" data-id="best" aria-pressed="${st.tier !== 'cheap'}">Najlepsza jakość</button><button data-a="setTier" data-id="cheap" aria-pressed="${st.tier === 'cheap'}">Taniej / na ilość</button></div>
+    ${keyInput(E.prov)}
+    <div class="meta-line mono"><span>Pisze: ${esc(R.writer.model || '—')}</span><span>Redaguje: ${esc(R.editor.model || '—')}</span><span>Pamięć: ${esc(R.memory.model || '—')}</span></div>
+    <span class="hint">${esc(E.note)}</span>
+    <button class="btn" data-a="testConn">Sprawdź połączenie</button>
   </div>
+  <details class="card adv"><summary><span class="label">Zaawansowane</span></summary><div class="stack" style="gap:14px;margin-top:12px">
+    <span class="hint">Tu możesz dać każdej roli inny model, np. Kimi pisze, a Claude redaguje. Wybór modelu na górze nadpisze te ustawienia.</span>
+    <div class="card"><div class="label">Pozostałe klucze</div>${Object.keys(PROVIDERS).filter(k => k !== 'custom' && k !== E.prov).map(keyInput).join('')}</div>
   <div class="card">
-    <label class="field"><span>Klucz Kimi API (Moonshot)</span><input type="password" id="msKey" data-f="settings.msKey" value="${esc(st.msKey || '')}" placeholder="sk-…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-    <span class="hint">Klucz z <a href="https://platform.moonshot.ai" target="_blank" rel="noopener">platform.moonshot.ai</a> → API Keys. Uwaga: regulamin Moonshot pozwala im używać treści z API do ulepszania usług, chyba że masz osobną umowę. Przełącznik prywatności z OpenRouter tu nie działa.</span>
-    <button class="btn" data-a="useKimiWriter">Kimi jako pisarz, Claude jako redaktor i archiwista</button>
-  </div>
-  <div class="card">
-    <label class="field"><span>Klucz OpenRouter</span><input type="password" id="orKey" data-f="settings.orKey" value="${esc(st.orKey)}" placeholder="sk-or-…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-    <span class="hint">Klucz założysz na <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Zostaje tylko na tym urządzeniu.</span>
-    <button class="btn" data-a="testConn">Sprawdź połączenie (Pisarz)</button>
-  </div>
-  <div class="card">
-    <div class="label">Prywatność</div>
+    <div class="label">Prywatność (tylko OpenRouter)</div>
     <label class="toggle"><span>Tylko dostawcy, którzy nie trenują na moich tekstach</span><input type="checkbox" id="deny" data-f="settings.denyTraining" ${st.denyTraining ? 'checked' : ''}></label>
     <label class="toggle"><span>Tylko zero przechowywania danych (ZDR)</span><input type="checkbox" id="zdr" data-f="settings.zdr" ${st.zdr ? 'checked' : ''}></label>
     <span class="hint">ZDR mocniej zawęża listę dostawców. Jeśli model przestanie odpowiadać, wyłącz ZDR. Na koncie OpenRouter możesz to też ustawić na stałe w zakładce Privacy.</span>
@@ -1118,6 +1174,7 @@ function viewSettings() {
     <label class="field"><span>Klucz</span><input type="password" id="cKey" data-f="settings.customKey" value="${esc(st.customKey)}" autocomplete="off"></label>
     <span class="hint">Tu podepniesz Groq, Fireworks, Twój wytrenowany model w chmurze albo Ollamę przez Tailscale. Endpoint musi akceptować zapytania z przeglądarki (CORS).</span>
   </div>
+  </div></details>
   <div class="card">
     <div class="label">Dataset pod Twój fine-tune</div>
     <div class="meta-line"><span>Scen z poprawkami (SFT): <b>${sft}</b></span><span>Wyborów zakończeń (DPO): <b>${dpo}</b></span></div>
@@ -1129,7 +1186,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1149,6 +1206,7 @@ document.addEventListener('input', e => {
   const el = e.target;
   if (el.id === 'chapterSel') { S.project.currentChapter = el.value; saveProject(); render(); return; }
   if (el.id === 'evFilter') { S.evFilter = el.value; render(); return; }
+  if (el.id === 'engineQuick') { S.settings.engine = el.value; applyEngine(); toast('Model: ' + ENGINES[el.value].label); return; }
   if (el.id === 'modelSearch') { renderModelList(el.value); return; }
   const f = el.dataset.f; if (!f) return;
   const dot = f.lastIndexOf('.'); const scope = f.slice(0, dot), key = f.slice(dot + 1);
@@ -1159,11 +1217,14 @@ document.addEventListener('input', e => {
   if (el.classList.contains('auto')) autosize(el);
   if (scope === 'settings' || scope.startsWith('role_')) {
     saveSettings();
+    if (scope === 'settings' && /Key$/.test(key)) { clearTimeout(ctxT); ctxT = setTimeout(() => { const E = ENGINES[S.settings.engine]; if (E && PROVIDERS[E.prov].keyField === key && (E.prov === 'openai' || E.prov === 'gemini')) applyEngine(); }, 900); }
     if (el.type === 'range') { const t = $('#tv_' + scope.slice(5)); if (t) t.textContent = v; }
     if (key === 'provider') {
       const isClaude = /^claude-/.test(obj.model);
       if (v === 'anthropic' && !isClaude) obj.model = scope === 'role_memory' ? 'claude-haiku-5-5' : 'claude-sonnet-5-5';
       if (v === 'moonshot') obj.model = 'kimi-k3';
+      if (v === 'gemini') obj.model = scope === 'role_memory' ? 'gemini-3.1-flash-lite' : 'gemini-3.8-flash';
+      if (v === 'openai') obj.model = '';
       if (v === 'openrouter' && isClaude) obj.model = DEFAULT_SETTINGS.roles[scope.slice(5)].model;
       render();
     }
@@ -1610,6 +1671,21 @@ async function loadModels() {
 }
 A.pickModel = async role => {
   S.ui = { role };
+  const prov = S.settings.roles[role].provider;
+  if (prov === 'openai' || prov === 'gemini') {
+    openSheet('Model: ' + ROLE_INFO[role].name, `<input type="search" id="modelSearch" placeholder="Szukaj…" autocapitalize="off" autocorrect="off"><div id="modelList">${loader('Pobieram listę modeli z ' + PROVIDERS[prov].name + '…')}</div>`);
+    try {
+      const P = PROVIDERS[prov], key = (S.settings[P.keyField] || '').trim();
+      if (!key) throw new UserError('Najpierw wpisz klucz ' + P.name + ' w Ustawieniach.');
+      const r = await fetch(P.base + '/models', { headers: { Authorization: 'Bearer ' + key } });
+      if (!r.ok) throw httpError(r.status, await r.text().catch(() => ''));
+      const j = await r.json();
+      const skip = /embed|whisper|tts|dall|image|audio|realtime|moderation|transcribe|search|aqa|veo|imagen|computer/i;
+      S.models = (j.data || []).map(m => String(m.id).replace(/^models\//, '')).filter(id => !skip.test(id)).sort().reverse().map(id => ({ id, name: id, live: true }));
+      S.modelsFor = prov; renderModelList('');
+    } catch (e) { $('#modelList').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+    return;
+  }
   if (S.settings.roles[role].provider === 'moonshot') {
     openSheet('Model: ' + ROLE_INFO[role].name, KIMI_MODELS.map(m => `<button class="model-row" data-a="setModel" data-id="${m.id}"><span>${esc(m.name)}</span><span class="mono">${m.id}</span><span class="small muted">${esc(m.note)}</span></button>`).join('') + '<span class="hint">Inny model wpiszesz ręcznie w polu Model.</span>');
     return;
@@ -1627,8 +1703,22 @@ function renderModelList(q) {
   const sugg = ['moonshotai/kimi-k3', 'moonshotai/kimi-k3.1-pro', 'google/gemini-3.8-flash', 'google/gemini-4-argon', 'qwen', 'deepseek', 'anthropic'];
   let list = S.models.filter(m => !t || m.id.toLowerCase().includes(t) || (m.name || '').toLowerCase().includes(t));
   if (!t) list = list.sort((a, b) => (sugg.findIndex(s => a.id.startsWith(s)) + 1 || 99) - (sugg.findIndex(s => b.id.startsWith(s)) + 1 || 99));
-  el.innerHTML = list.slice(0, 80).map(m => `<button class="model-row" data-a="setModel" data-id="${esc(m.id)}"><span>${esc(m.name || m.id)}</span><span class="mono">${esc(m.id)} · $${m.pin.toFixed(2)} / $${m.pout.toFixed(2)} za 1M · ${fmtN(m.ctx)} kontekstu</span></button>`).join('') || '<div class="empty">Nic nie znaleziono.</div>';
+  el.innerHTML = list.slice(0, 80).map(m => m.live ? `<button class="model-row" data-a="setModel" data-id="${esc(m.id)}"><span class="mono" style="color:var(--fg)">${esc(m.id)}</span></button>` : `<button class="model-row" data-a="setModel" data-id="${esc(m.id)}"><span>${esc(m.name || m.id)}</span><span class="mono">${esc(m.id)} · $${m.pin.toFixed(2)} / $${m.pout.toFixed(2)} za 1M · ${fmtN(m.ctx)} kontekstu</span></button>`).join('') || '<div class="empty">Nic nie znaleziono.</div>';
 }
+A.setEngine = id => { S.settings.engine = id; applyEngine(); toast('Model: ' + ENGINES[id].label); };
+A.setTier = id => { S.settings.tier = id; applyEngine(); };
+A.useGeminiAll = () => {
+  const R = S.settings.roles;
+  R.writer.provider = 'gemini'; R.writer.model = 'gemini-3.8-flash';
+  R.editor.provider = 'gemini'; R.editor.model = 'gemini-3.8-flash';
+  R.memory.provider = 'gemini'; R.memory.model = 'gemini-3.1-flash-lite';
+  saveSettings(); render(); toast('Gemini ustawiony. Jeśli model nie odpowie, wybierz go z listy przy roli.');
+};
+A.useOpenAIAll = () => {
+  const R = S.settings.roles;
+  for (const k of ['writer', 'editor', 'memory']) { R[k].provider = 'openai'; if (!/^(gpt|o\d|chatgpt)/.test(R[k].model)) R[k].model = ''; }
+  saveSettings(); render(); toast('Ustaw model przy każdej roli przyciskiem Wybierz.');
+};
 A.useKimiWriter = () => {
   const R = S.settings.roles;
   R.writer.provider = 'moonshot'; R.writer.model = 'kimi-k3';
@@ -1667,7 +1757,7 @@ A.exportDPO = () => {
 };
 A.exportBackup = async () => {
   const projects = []; for (const m of S.projects) { const p = await DB.get('p:' + m.id); if (p) projects.push(p); }
-  const { orKey, anKey, msKey, customKey, ...settings } = S.settings;
+  const { orKey, anKey, msKey, oaKey, gmKey, customKey, ...settings } = S.settings;
   saveFile(`atrament-kopia-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'atrament', v: 1, at: Date.now(), settings, projects }), 'application/json');
 };
 A.importBackup = () => $('#fileIn').click();
@@ -1682,7 +1772,7 @@ $('#fileIn').addEventListener('change', async e => {
       if (i >= 0) S.projects[i] = meta; else S.projects.push(meta);
     }
     await DB.set('projects', S.projects);
-    if (j.settings) { const { orKey, anKey, msKey, customKey } = S.settings; S.settings = { ...DEFAULT_SETTINGS, ...j.settings, roles: { ...DEFAULT_SETTINGS.roles, ...(j.settings.roles || {}) }, orKey, anKey, msKey, customKey }; saveSettings(); }
+    if (j.settings) { const { orKey, anKey, msKey, oaKey, gmKey, customKey } = S.settings; S.settings = { ...DEFAULT_SETTINGS, ...j.settings, roles: { ...DEFAULT_SETTINGS.roles, ...(j.settings.roles || {}) }, orKey, anKey, msKey, oaKey, gmKey, customKey }; saveSettings(); }
     if (j.projects[0]) S.project = migrate(await DB.get('p:' + (S.project && j.projects.some(p => p.id === S.project.id) ? S.project.id : j.projects[0].id)));
     S.sceneId = null; render(); toast(`Wczytano ${j.projects.length} opowieści.`);
   } catch (err) { toastErr(err instanceof SyntaxError ? new UserError('Plik jest uszkodzony.') : err); }
@@ -2001,6 +2091,7 @@ function migrate(p) {
   await DB.open();
   const st = await DB.get('settings');
   S.settings = { ...DEFAULT_SETTINGS, ...(st || {}), roles: { ...DEFAULT_SETTINGS.roles, ...(st?.roles || {}) } };
+  if (st && !st.engine) { const m = { anthropic: 'claude', openai: 'openai', gemini: 'gemini', moonshot: 'kimi', openrouter: 'openrouter' }; S.settings.engine = m[S.settings.roles.writer.provider] || 'claude'; }
   S.projects = (await DB.get('projects')) || [];
   if (!S.projects.length) {
     const p = sampleProject(); await DB.set('p:' + p.id, p);
