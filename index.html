@@ -1,0 +1,1910 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Atrament</title>
+<meta name="description" content="Pisanie opowieści z AI, które pamięta postacie i wydarzenia.">
+<meta name="theme-color" content="#0F1218">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atrament">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<style>
+/* Layout: aplikacja mobilna — przyklejony nagłówek, przewijana treść w kolumnie ~680px, dolny pasek zakładek. */
+:root {
+  --bg: #EEF0F3;
+  --surface: #FFFFFF;
+  --surface2: #E3E7ED;
+  --fg: #151922;
+  --muted: #5B6474;
+  --line: #D2D8E0;
+  --accent: #2E43B0;
+  --accent-fg: #FFFFFF;
+  --accent-soft: #DCE2FA;
+  --warn: #8A5200;
+  --warn-bg: #FFF0D2;
+  --ok: #19704A;
+  --ok-bg: #DAF2E4;
+  --bad: #B02A1C;
+  --bad-bg: #FCE3DF;
+  --ins: #12663F;
+  --ins-bg: #D3F0DF;
+  --del: #A1281A;
+  --del-bg: #FADBD6;
+  --prose: 'Literata', Georgia, 'Times New Roman', serif;
+  --ui: 'IBM Plex Sans', -apple-system, system-ui, 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --r: 10px;
+  --nav-h: 58px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1218; --surface: #171B23; --surface2: #222833; --fg: #E6E9EF; --muted: #97A0AF; --line: #2D3441;
+    --accent: #95A8FF; --accent-fg: #0F1218; --accent-soft: #252E55;
+    --warn: #F2B653; --warn-bg: #36280E; --ok: #63D49C; --ok-bg: #11301F; --bad: #FF8E7E; --bad-bg: #3A1813;
+    --ins: #7FE0AE; --ins-bg: #143524; --del: #FF9C8E; --del-bg: #431A14;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1218; --surface: #171B23; --surface2: #222833; --fg: #E6E9EF; --muted: #97A0AF; --line: #2D3441;
+  --accent: #95A8FF; --accent-fg: #0F1218; --accent-soft: #252E55;
+  --warn: #F2B653; --warn-bg: #36280E; --ok: #63D49C; --ok-bg: #11301F; --bad: #FF8E7E; --bad-bg: #3A1813;
+  --ins: #7FE0AE; --ins-bg: #143524; --del: #FF9C8E; --del-bg: #431A14;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 var(--ui);
+  padding-top: env(safe-area-inset-top, 0px);
+  -webkit-tap-highlight-color: transparent;
+}
+body.noscroll { overflow: hidden; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 30; background: var(--surface); }
+button, input, select, textarea { font: inherit; color: inherit; }
+input, select, textarea { font-size: 16px; } /* iOS nie zoomuje przy >=16px */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+
+/* Nagłówek */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.top-in { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+.brand { font-family: var(--prose); font-weight: 600; font-size: 19px; letter-spacing: .01em; }
+.proj-btn {
+  margin-left: auto; min-width: 0; max-width: 62%;
+  display: flex; align-items: center; gap: 6px;
+  background: var(--surface2); border: 0; border-radius: 999px; padding: 6px 12px; cursor: pointer;
+}
+.proj-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-btn::after { content: "▾"; color: var(--muted); font-size: 12px; }
+
+/* Treść */
+main {
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 28px);
+}
+.wrap { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+/* Dolny pasek */
+.nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
+}
+.nav-in { max-width: 720px; margin: 0 auto; display: grid; grid-template-columns: repeat(5, 1fr); height: var(--nav-h); }
+.nav button {
+  background: none; border: 0; cursor: pointer; color: var(--muted);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: 12px; font-weight: 500; letter-spacing: .02em;
+}
+.nav button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.nav button[aria-current="page"] { color: var(--accent); }
+
+/* Elementy */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > .grow { flex: 1 1 160px; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.hint { font-size: 13px; color: var(--muted); }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.mono { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+h2.sec { font-family: var(--prose); font-size: 21px; font-weight: 600; }
+h3 { font-size: 15px; font-weight: 600; }
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > span { font-size: 13px; font-weight: 500; color: var(--muted); }
+input[type=text], input[type=password], input[type=url], input[type=number], input[type=search], select, textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; min-width: 0;
+}
+textarea { resize: vertical; line-height: 1.5; min-height: 84px; }
+select { appearance: none; -webkit-appearance: none; padding-right: 30px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid var(--line); background: var(--surface); border-radius: 8px;
+  padding: 9px 14px; cursor: pointer; font-weight: 500; font-size: 14.5px; min-height: 40px; white-space: nowrap;
+}
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--accent); padding-inline: 8px; }
+.btn.danger { color: var(--bad); }
+.btn.block { width: 100%; }
+.btn[disabled] { opacity: .5; pointer-events: none; }
+.btn.sm { min-height: 32px; padding: 5px 10px; font-size: 13.5px; }
+.icon-btn { background: none; border: 0; font-size: 26px; line-height: 1; padding: 4px 8px; cursor: pointer; color: var(--muted); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line); background: var(--bg); border-radius: 999px; padding: 5px 11px; font-size: 14px; cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); }
+.tag { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--surface2); color: var(--muted); }
+.tag.ok { background: var(--ok-bg); color: var(--ok); }
+.tag.warn { background: var(--warn-bg); color: var(--warn); }
+.tag.acc { background: var(--accent-soft); color: var(--accent); }
+
+.banner { border-radius: var(--r); padding: 11px 13px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.banner.warn { background: var(--warn-bg); color: var(--fg); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); }
+.banner.warn b { color: var(--warn); }
+.banner.info { background: var(--accent-soft); }
+.banner.bad { background: var(--bad-bg); }
+
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface2); border-radius: 9px; padding: 3px; gap: 3px; }
+.seg button { border: 0; background: transparent; border-radius: 7px; padding: 7px 4px; font-size: 13.5px; font-weight: 500; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+
+.list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.item { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer; width: 100%; }
+.item:first-child { border-top: 0; }
+.item .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.item .t { font-weight: 600; }
+.item .d { font-size: 14px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.item .side { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.empty { padding: 22px 14px; text-align: center; color: var(--muted); font-size: 14px; }
+.chap-head { padding: 8px 14px; background: var(--surface2); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* Edytor prozy */
+.prose {
+  font-family: var(--prose); font-size: 18px; line-height: 1.7; min-height: 46vh;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 16px 20px;
+  font-variation-settings: "opsz" 16; overflow: hidden; resize: none;
+}
+.prose.streaming { border-color: var(--accent); }
+input.scene-title { font-family: var(--prose); font-size: 20px; font-weight: 600; background: transparent; border: 0; padding: 2px 0; border-bottom: 1px dashed var(--line); border-radius: 0; }
+.actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.meta-line { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+details.plan { display: block; }
+details.plan > .stack { margin-top: 12px; gap: 12px; }
+details.plan > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+details.plan > summary::-webkit-details-marker { display: none; }
+details.plan > summary::after { content: "Zwiń"; margin-left: auto; font-size: 13px; color: var(--accent); }
+details.plan:not([open]) > summary::after { content: "Rozwiń"; }
+
+/* Arkusz (bottom sheet) */
+#sheet { position: fixed; inset: 0; z-index: 50; }
+.sheet-bg { position: absolute; inset: 0; background: rgb(5 8 14 / .5); }
+.sheet-panel {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: calc(100% - env(safe-area-inset-top, 0px) - 24px);
+  background: var(--surface); border-radius: 16px 16px 0 0; display: flex; flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom, 0px); max-width: 760px; margin: 0 auto;
+  animation: up .22s ease-out;
+}
+@keyframes up { from { transform: translateY(24px); } to { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .sheet-panel { animation: none; } }
+.sheet-head { display: flex; align-items: center; gap: 8px; padding: 12px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--line); }
+.sheet-head h2 { font-family: var(--prose); font-size: 19px; font-weight: 600; flex: 1; min-width: 0; }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px max(16px, env(safe-area-inset-right, 0px)) 18px max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 12px; }
+.sheet-foot { position: sticky; bottom: -18px; background: var(--surface); padding: 10px 0 4px; display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); margin-top: 4px; }
+.sheet-foot .btn { flex: 1 1 130px; }
+
+/* Diff */
+.diff { font-family: var(--prose); font-size: 17px; line-height: 1.75; white-space: pre-wrap; word-wrap: break-word; background: var(--bg); border-radius: var(--r); padding: 14px; }
+.hunk { display: inline; border: 0; padding: 0 1px; margin: 0; background: none; font: inherit; cursor: pointer; border-radius: 3px; text-align: left; }
+.hunk del { background: var(--del-bg); color: var(--del); text-decoration: line-through; }
+.hunk ins { background: var(--ins-bg); color: var(--ins); text-decoration: none; }
+.hunk.off del { text-decoration: none; background: transparent; color: inherit; }
+.hunk.off ins { display: none; }
+.hunk:focus-visible { outline: 2px solid var(--accent); }
+
+.variant { border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.variant p { margin: 0; font-family: var(--prose); font-size: 16.5px; line-height: 1.65; white-space: pre-wrap; }
+.skel { height: 74px; border-radius: 8px; background: linear-gradient(90deg, var(--surface2), var(--bg), var(--surface2)); background-size: 200% 100%; animation: sh 1.3s infinite linear; }
+@keyframes sh { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
+.xitem { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px solid var(--line); }
+.xitem:first-of-type { border-top: 0; }
+.xitem input { width: 20px; height: 20px; margin-top: 2px; flex: none; accent-color: var(--accent); }
+.xitem .x { flex: 1; min-width: 0; font-size: 14.5px; }
+pre.ctx { white-space: pre-wrap; word-wrap: break-word; font-family: var(--mono); font-size: 12px; line-height: 1.5; background: var(--bg); padding: 12px; border-radius: 8px; margin: 0; max-height: 60vh; overflow: auto; }
+
+.toggle { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.toggle input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.spinner { width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(1turn); } }
+
+#toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--nav-h) + env(safe-area-inset-bottom, 0px) + 14px); z-index: 60;
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; max-width: min(92vw, 520px); box-shadow: 0 6px 24px rgb(0 0 0 / .25); }
+#toast.bad { background: var(--bad); color: #fff; }
+.model-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 2px; border-top: 1px solid var(--line); background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; cursor: pointer; width: 100%; }
+.model-row .mono { color: var(--muted); }
+a { color: var(--accent); }
+
+/* Książka */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat b { font-family: var(--prose); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12.5px; color: var(--muted); }
+.bar { height: 8px; border-radius: 99px; background: var(--surface2); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.chap-card { padding: 0; gap: 0; overflow: hidden; }
+.chap-card .ch-top { display: flex; gap: 8px; align-items: flex-start; padding: 12px 12px 10px 14px; }
+.chap-card .ch-top .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ch-num { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.ch-title { font-family: var(--prose); font-size: 17px; font-weight: 600; }
+.part-label { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 2px 0; }
+.mv { display: flex; gap: 2px; flex: none; }
+.mv button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; font-size: 15px; line-height: 1; color: var(--muted); }
+.mv button[disabled] { opacity: .35; pointer-events: none; }
+.sc-row { display: flex; gap: 8px; align-items: center; padding: 8px 12px 8px 14px; border-top: 1px solid var(--line); }
+.sc-row .nm { flex: 1; min-width: 0; background: none; border: 0; text-align: left; cursor: pointer; padding: 4px 0; display: flex; flex-direction: column; }
+.sc-row .nm span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-row.off .nm { opacity: .45; text-decoration: line-through; }
+.sc-row input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+
+.book { font-family: var(--prose); font-size: 18.5px; line-height: 1.7; hyphens: auto; -webkit-hyphens: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 28px 22px 40px; }
+.book p { margin: 0; text-indent: 1.4em; text-align: justify; }
+.book .noind, .book h2 + p, .book .sep + p, .book .chap-sub + p { text-indent: 0; }
+.book .front { text-align: center; padding: 40px 0 70px; display: flex; flex-direction: column; gap: 10px; }
+.book .front h1 { font-size: 34px; line-height: 1.2; font-weight: 600; }
+.book .front .sub { font-style: italic; color: var(--muted); }
+.book .front .auth { margin-top: 18px; letter-spacing: .12em; text-transform: uppercase; font-size: 15px; }
+.book .dedic { text-align: center; font-style: italic; padding: 30px 0; }
+.book .motto { text-align: right; font-style: italic; padding: 10px 0 40px; max-width: 30em; margin-left: auto; }
+.book .part { text-align: center; padding: 70px 0; font-size: 24px; font-weight: 600; letter-spacing: .04em; }
+.book h2 { text-align: center; font-size: 15px; font-weight: 400; letter-spacing: .16em; text-transform: uppercase; margin: 64px 0 4px; }
+.book .chap-sub { text-align: center; font-size: 23px; font-weight: 600; margin: 0 0 30px; text-wrap: balance; }
+.book .sep { text-align: center; margin: 20px 0; letter-spacing: .3em; color: var(--muted); }
+.toc-jump { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 58px); z-index: 5; }
+
+#print { display: none; }
+@media print {
+  @page { size: A5; margin: 18mm 16mm 20mm; }
+  body { background: #fff; color: #000; padding: 0; }
+  body::before, .top, .nav, main, #sheet, #toast { display: none !important; }
+  #print { display: block; }
+  #print .book { border: 0; padding: 0; background: #fff; color: #000; font-size: 10.5pt; line-height: 1.45; }
+  #print .book .front, #print .book .part { page-break-after: always; break-after: page; min-height: 60vh; }
+  #print .book .dedic, #print .book .motto { break-after: page; }
+  #print .book h2 { break-before: page; margin-top: 30mm; }
+  #print .book .sub, #print .book .sep { color: #444; }
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <span class="brand">Atrament</span>
+  <button class="proj-btn" data-a="openProjects" aria-label="Zmień projekt"><span id="projName">…</span></button>
+</div></header>
+
+<main><div class="wrap" id="view"></div></main>
+
+<nav class="nav" aria-label="Główna nawigacja"><div class="nav-in">
+  <button data-a="nav" data-id="write"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>Pisz</button>
+  <button data-a="nav" data-id="memory"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><path d="M15.5 5.5h5M15.5 9.5h5M17 13.5h3.5"/></svg>Pamięć</button>
+  <button data-a="nav" data-id="book"><svg viewBox="0 0 24 24"><path d="M4 5.5C6.5 4.5 9.5 4.5 12 6c2.5-1.5 5.5-1.5 8-.5V19c-2.5-1-5.5-1-8 .5-2.5-1.5-5.5-1.5-8-.5V5.5z"/><path d="M12 6v13.5"/></svg>Książka</button>
+  <button data-a="nav" data-id="style"><svg viewBox="0 0 24 24"><path d="M5 19V5h9a4 4 0 0 1 0 8H5"/><path d="M11 13l5 6"/></svg>Styl</button>
+  <button data-a="nav" data-id="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/></svg>Ustawienia</button>
+</div></nav>
+
+<div id="sheet" hidden></div>
+<div id="toast" hidden role="status" aria-live="polite"></div>
+<div id="print" aria-hidden="true"></div>
+<input type="file" id="fileIn" accept="application/json,.json" hidden>
+
+<script>
+'use strict';
+/* ============================== Narzędzia ============================== */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = p => p + '_' + Math.random().toString(36).slice(2, 9);
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const estTok = s => Math.round((s || '').length / 3.6);
+const fmtN = n => Number(n || 0).toLocaleString('pl-PL');
+const wc = s => ((s || '').match(/\p{L}[\p{L}'-]*/gu) || []).length;
+const lines = s => (s || '').split('\n').map(x => x.trim()).filter(Boolean);
+class UserError extends Error {}
+
+function toast(msg, bad) {
+  const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : ''; t.hidden = false;
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), bad ? 6500 : 2600);
+}
+function toastErr(e) { console.error(e); toast(e instanceof UserError ? e.message : 'Coś poszło nie tak: ' + (e.message || e), true); }
+function autosize(el) { if (!el) return; el.style.height = 'auto'; el.style.height = (el.scrollHeight + 2) + 'px'; }
+function splitParas(t) { return (t || '').replace(/\r/g, '').split(/\n+/).map(s => s.trim()).filter(Boolean); }
+function joinParas(a) { return a.join('\n\n'); }
+
+/* ============================== Baza (IndexedDB) ============================== */
+const DB = {
+  db: null, mem: new Map(),
+  open() {
+    return new Promise(res => {
+      try {
+        const r = indexedDB.open('atrament', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onsuccess = () => { this.db = r.result; res(); };
+        r.onerror = () => res();
+      } catch { res(); }
+    });
+  },
+  get(k) {
+    if (!this.db) return Promise.resolve(this.mem.get(k));
+    return new Promise(res => {
+      const q = this.db.transaction('kv').objectStore('kv').get(k);
+      q.onsuccess = () => res(q.result); q.onerror = () => res(undefined);
+    });
+  },
+  set(k, v) {
+    if (!this.db) { this.mem.set(k, v); return Promise.resolve(); }
+    return new Promise(res => {
+      const tx = this.db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k);
+      tx.oncomplete = () => res(); tx.onerror = () => { toast('Nie udało się zapisać danych na urządzeniu.', true); res(); };
+    });
+  },
+  del(k) {
+    if (!this.db) { this.mem.delete(k); return Promise.resolve(); }
+    return new Promise(res => { const tx = this.db.transaction('kv', 'readwrite'); tx.objectStore('kv').delete(k); tx.oncomplete = () => res(); tx.onerror = () => res(); });
+  }
+};
+
+/* ============================== Stan ============================== */
+const DEFAULT_SETTINGS = {
+  orKey: '', customBase: '', customKey: '', customName: 'Własny endpoint',
+  roles: {
+    writer: { provider: 'openrouter', model: 'moonshotai/kimi-k3', temp: 0.8 },
+    editor: { provider: 'openrouter', model: 'google/gemini-3.8-flash', temp: 0.2 },
+    memory: { provider: 'openrouter', model: 'google/gemini-3.8-flash', temp: 0.2 },
+  },
+  reasoning: 'low', denyTraining: true, zdr: false, lt: true,
+  spent: 0, lastProject: null,
+};
+const ROLE_INFO = {
+  writer: { name: 'Pisarz', desc: 'Pisze sceny, pomysły i alternatywne zakończenia.' },
+  editor: { name: 'Redaktor', desc: 'Poprawia polszczyznę bez zmieniania treści.' },
+  memory: { name: 'Archiwista', desc: 'Po każdej scenie aktualizuje pamięć: wydarzenia, wiedzę postaci, wątki.' },
+};
+const DEFAULT_BANNED = [
+  'nic już nie będzie takie samo', 'to było wszystko', 'i to wystarczyło', 'westchnął ciężko', 'westchnęła ciężko',
+  'w powietrzu wisiało napięcie', 'czas jakby się zatrzymał', 'zimny dreszcz przebiegł', 'serce zabiło mocniej', 'wypuścił powietrze, którego nie był świadomy',
+];
+const ENDINGS = {
+  cliff: { label: 'Cliffhanger', ins: 'Urwij scenę w momencie największego napięcia, tuż przed rozstrzygnięciem. Ostatnie zdanie to akcja albo bodziec, nie myśl postaci.' },
+  dialog: { label: 'Na dialogu', ins: 'Zakończ scenę czyjąś kwestią dialogową. Po niej już nic: żadnego komentarza narratora ani opisu reakcji.' },
+  akcja: { label: 'W ruchu', ins: 'Zakończ w trakcie konkretnej czynności fizycznej, która jeszcze trwa. Bez domykania i bez refleksji.' },
+  obraz: { label: 'Obraz', ins: 'Zakończ jednym konkretnym, zmysłowym detalem (dźwięk, światło, przedmiot), nie interpretując go.' },
+  zwrot: { label: 'Zwrot', ins: 'W ostatnich zdaniach wprowadź nową informację albo zdarzenie, które zmienia sytuację. Nie komentuj go.' },
+  ciecie: { label: 'Ostre cięcie', ins: 'Urwij scenę w pół sytuacji, zanim cokolwiek się domknie, jak cięcie montażowe.' },
+  cisza: { label: 'Zawieszenie', ins: 'Zostaw sytuację niedomkniętą: pytanie bez odpowiedzi, gest bez reakcji. Nikt niczego nie podsumowuje.' },
+};
+const LENGTHS = { 500: 'Krótka (~500 słów)', 900: 'Średnia (~900 słów)', 1500: 'Długa (~1500 słów)' };
+
+const S = { settings: null, projects: [], project: null, view: 'write', memTab: 'chars', sceneId: null, models: null, evFilter: '' };
+
+function newProject(title) {
+  const ch = { id: uid('c'), title: 'Rozdział 1', summary: '', scenes: [] };
+  return {
+    id: uid('p'), title: title || 'Nowa opowieść', created: Date.now(), updated: Date.now(),
+    style: { guide: '', sample: '' }, banned: DEFAULT_BANNED.join('\n'), tics: { detect: true, budget: 1 },
+    characters: [], events: [], threads: [], chapters: [ch], currentChapter: ch.id,
+    dataset: { sft: [], dpo: [] }, book: defaultBook(),
+  };
+}
+function defaultBook() {
+  return { subtitle: '', author: '', dedication: '', motto: '', mottoSource: '', blurb: '', target: 80000, numbering: 'words', sep: '* * *', typo: true, onlyAccepted: false };
+}
+function newScene(n) {
+  return { id: uid('s'), title: 'Scena ' + n, plan: '', who: [], ending: 'auto', words: 900, text: '', summary: '', status: 'draft', history: [] };
+}
+
+function sampleProject() {
+  const p = newProject('Przykład: Latarnia na Helu');
+  p.sample = true;
+  p.style.guide = 'Narracja trzecioosobowa, czas przeszły, blisko Hanny. Proza oszczędna, konkretna, morska wilgoć i zmęczenie. Dialogi krótkie, ludzie mówią mniej, niż myślą. Bez patosu.';
+  const h = { id: uid('ch'), name: 'Hanna', aliases: 'Hania, Hanka', role: 'protagonistka, latarniczka', description: '34 lata, przejęła latarnię po ojcu. Nieufna, dokładna, prowadzi dziennik pogody.', motivation: 'Chce dowiedzieć się, dlaczego ojciec zniknął, ale boi się, że prawda obciąży brata.', voice: 'Krótko, sucho, ironicznie. Unika pytań wprost.', relations: 'Tomek: młodszy brat, kocha go i mu nie ufa.', knows: ['Ojciec zostawił list w skrzynce sygnałowej (rozdz. 1)'], unknown: 'Nie wie, że Tomek był na molo w noc zniknięcia ojca.', changes: [] };
+  const t = { id: uid('ch'), name: 'Tomek', aliases: 'Tomasz', role: 'brat Hanny', description: '29 lat, rybak, zadłużony u lokalnego skupu.', motivation: 'Spłacić dług i utrzymać łódź.', voice: 'Dużo mówi, żartuje, gdy się boi. Przeklina.', relations: 'Hanna: starsza siostra, czuje się przy niej oceniany.', knows: ['Był na molo w noc zniknięcia ojca'], unknown: 'Nie wie o liście w skrzynce sygnałowej.', changes: [] };
+  p.characters = [h, t];
+  const ch = p.chapters[0];
+  ch.title = 'Rozdział 1. Skrzynka';
+  const sc = newScene(1);
+  sc.title = 'List'; sc.status = 'accepted'; sc.who = [h.id]; sc.ending = 'obraz'; sc.endingUsed = 'obraz';
+  sc.plan = 'Hanna sprawdza skrzynkę sygnałową po sztormie i znajduje list od ojca.';
+  sc.text = 'Sztorm odszedł nad ranem, zostawiając na galerii latarni sól i pióra mew. Hanna zeszła do skrzynki sygnałowej z kluczem na sznurku, tym samym, który ojciec nosił przez trzydzieści lat.\n\nZamek zaciął się jak zawsze. Musiała go podważyć nożem.\n\nW środku, pod zwojem starych flag, leżała koperta. Papier był suchy, co nie miało prawa się zdarzyć. Na kopercie jej imię, wypisane jego pochyłym pismem, tym, które robiło z „H” coś w rodzaju kotwicy.\n\nNie otworzyła jej od razu. Najpierw zapisała w dzienniku: wiatr NW, słabnący, widzialność dobra. Dopiero potem rozcięła kopertę i przeczytała pierwsze zdanie: „Nie mów Tomkowi”.\n\nNa dole, przy molo, ktoś zapalił silnik łodzi.';
+  sc.summary = 'Po sztormie Hanna znajduje w skrzynce sygnałowej suchy list od zaginionego ojca, zaczynający się od słów „Nie mów Tomkowi”. W tym samym momencie przy molo ktoś uruchamia łódź.';
+  ch.scenes.push(sc);
+  p.events = [
+    { id: uid('e'), chapterId: ch.id, sceneId: sc.id, text: 'Hanna znalazła w skrzynce sygnałowej list od zaginionego ojca.', who: [h.id], consequence: 'Ma dowód, że ojciec planował zniknięcie albo wrócił.', important: true },
+    { id: uid('e'), chapterId: ch.id, sceneId: sc.id, text: 'List zaczyna się od słów „Nie mów Tomkowi”.', who: [h.id, t.id], consequence: 'Hanna ukrywa list przed bratem.', important: true },
+  ];
+  p.threads = [
+    { id: uid('t'), text: 'Kto zapalił silnik łodzi przy molo rano po sztormie?', who: [], status: 'open', openedIn: ch.id },
+    { id: uid('t'), text: 'Dlaczego koperta w skrzynce była sucha po sztormie? Ktoś ją włożył niedawno.', who: [h.id], status: 'open', openedIn: ch.id },
+  ];
+  p.currentChapter = ch.id;
+  return p;
+}
+
+let saveT = null;
+function saveProject() {
+  if (!S.project) return;
+  S.project.updated = Date.now();
+  clearTimeout(saveT);
+  saveT = setTimeout(async () => {
+    await DB.set('p:' + S.project.id, S.project);
+    const i = S.projects.findIndex(x => x.id === S.project.id);
+    const meta = { id: S.project.id, title: S.project.title, updated: S.project.updated };
+    if (i >= 0) S.projects[i] = meta; else S.projects.unshift(meta);
+    await DB.set('projects', S.projects);
+  }, 350);
+}
+let saveST = null;
+function saveSettings() { clearTimeout(saveST); saveST = setTimeout(() => DB.set('settings', S.settings), 250); }
+
+const curChapter = () => S.project.chapters.find(c => c.id === S.project.currentChapter) || S.project.chapters[0];
+const curScene = () => { if (!S.sceneId) return null; for (const c of S.project.chapters) { const s = c.scenes.find(x => x.id === S.sceneId); if (s) return s; } return null; };
+const chapterOf = sceneId => S.project.chapters.find(c => c.scenes.some(s => s.id === sceneId));
+const charById = id => S.project.characters.find(c => c.id === id);
+const charNames = c => [c.name, ...String(c.aliases || '').split(',')].map(s => s.trim()).filter(Boolean);
+function chapterIndex(id) { return S.project.chapters.findIndex(c => c.id === id); }
+
+function stem(n) { const s = n.toLowerCase(); if (s.length >= 6) return s.slice(0, -2); if (s.length >= 4) return s.slice(0, -1); return s; }
+function mentions(text, c) {
+  const t = (text || '').toLowerCase();
+  return charNames(c).some(n => n.length >= 2 && new RegExp('(^|[^\\p{L}])' + escRe(stem(n)), 'u').test(t));
+}
+function findChar(name) {
+  const n = String(name || '').trim().toLowerCase(); if (!n) return null;
+  const cs = S.project.characters;
+  return cs.find(c => charNames(c).some(x => x.toLowerCase() === n))
+    || cs.find(c => charNames(c).some(x => stem(x) === stem(n) || n.startsWith(stem(x)) || x.toLowerCase().startsWith(stem(n))))
+    || null;
+}
+const whoNames = ids => (ids || []).map(id => charById(id)?.name).filter(Boolean);
+
+/* ============================== Model (API) ============================== */
+function httpError(status, text) {
+  let m = ''; try { const j = JSON.parse(text); m = j.error?.message || j.message || ''; } catch { m = (text || '').slice(0, 160); }
+  const map = {
+    400: 'Model odrzucił zapytanie.', 401: 'Nieprawidłowy klucz API. Sprawdź go w Ustawieniach.', 402: 'Brak środków na koncie OpenRouter. Doładuj konto albo wybierz tańszy model.',
+    403: 'Dostawca zablokował zapytanie (moderacja treści albo uprawnienia klucza).', 404: 'Nie znaleziono modelu albo żaden dostawca nie spełnia Twoich ustawień prywatności. Wyłącz ZDR albo zmień model.',
+    408: 'Model nie odpowiedział na czas. Spróbuj ponownie.', 413: 'Za długi tekst dla tego modelu.', 429: 'Limit zapytań. Odczekaj chwilę albo zmień model.',
+    500: 'Błąd po stronie dostawcy. Spróbuj ponownie.', 502: 'Dostawca modelu nie odpowiada. Spróbuj ponownie.', 503: 'Brak dostępnego dostawcy dla tego modelu. Spróbuj za chwilę.',
+  };
+  const e = new UserError((map[status] || ('Błąd ' + status + '.')) + (m ? ' Szczegóły: ' + m : ''));
+  e.status = status; return e;
+}
+
+async function llm(role, messages, opt = {}) {
+  const st = S.settings, r = st.roles[role];
+  const isOR = r.provider === 'openrouter';
+  const base = isOR ? 'https://openrouter.ai/api/v1' : (st.customBase || '').trim().replace(/\/+$/, '');
+  const key = isOR ? st.orKey.trim() : (st.customKey || '').trim();
+  if (isOR && !key) throw new UserError('Brak klucza OpenRouter. Dodaj go w Ustawieniach.');
+  if (!isOR && !base) throw new UserError('Brak adresu własnego endpointu. Uzupełnij go w Ustawieniach.');
+  if (!r.model) throw new UserError('Nie wybrano modelu dla roli: ' + ROLE_INFO[role].name + '.');
+
+  const body = { model: r.model, messages, temperature: opt.temp ?? r.temp, stream: !!opt.stream };
+  if (opt.maxTokens) body.max_tokens = opt.maxTokens;
+  if (opt.json) body.response_format = { type: 'json_object' };
+  if (isOR) {
+    body.provider = {};
+    if (st.denyTraining) body.provider.data_collection = 'deny';
+    if (st.zdr) body.provider.zdr = true;
+    if (role === 'writer') body.reasoning = st.reasoning === 'off' ? { enabled: false } : { effort: st.reasoning, exclude: true };
+    body.usage = { include: true };
+  }
+  const headers = { 'Content-Type': 'application/json' };
+  if (key) headers.Authorization = 'Bearer ' + key;
+  if (isOR) { headers['HTTP-Referer'] = location.origin; headers['X-Title'] = 'Atrament'; }
+
+  const send = b => fetch(base + '/chat/completions', { method: 'POST', headers, body: JSON.stringify(b), signal: opt.signal });
+  let res;
+  try { res = await send(body); }
+  catch (e) { if (e.name === 'AbortError') throw e; throw new UserError('Brak połączenia z ' + (isOR ? 'OpenRouter' : base) + '. Sprawdź internet' + (isOR ? '.' : ' i czy endpoint pozwala na zapytania z przeglądarki (CORS).')); }
+  if (res.status === 400 && (body.reasoning || body.response_format)) {
+    // część modeli nie zna tych parametrów: ponów bez nich
+    delete body.reasoning; delete body.response_format;
+    res = await send(body);
+  }
+  if (!res.ok) throw httpError(res.status, await res.text().catch(() => ''));
+
+  let text = '', usage = null;
+  if (opt.stream && res.body) {
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data:')) continue;
+        const d = line.slice(5).trim();
+        if (!d || d === '[DONE]') continue;
+        let j; try { j = JSON.parse(d); } catch { continue; }
+        if (j.error) throw new UserError('Model przerwał: ' + (j.error.message || 'nieznany błąd'));
+        const c = j.choices?.[0]?.delta?.content;
+        if (c) { text += c; opt.onDelta?.(text); }
+        if (j.usage) usage = j.usage;
+      }
+    }
+  } else {
+    const j = await res.json();
+    if (j.error) throw new UserError('Model zwrócił błąd: ' + (j.error.message || ''));
+    text = j.choices?.[0]?.message?.content || '';
+    usage = j.usage || null;
+  }
+  if (usage?.cost) { st.spent = (st.spent || 0) + usage.cost; saveSettings(); }
+  return { text, usage, model: r.model };
+}
+
+function cleanOutput(t) {
+  return (t || '').replace(/\r/g, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/^\s*#{1,6}\s.*\n/, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/^\s*(scena|rozdział)\s*\d*\s*[:.].*\n/i, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+function parseJSON(t) {
+  if (!t) return null;
+  const s = t.replace(/```json|```/g, '');
+  try { return JSON.parse(s); } catch {}
+  const a = s.indexOf('{'), b = s.lastIndexOf('}');
+  if (a >= 0 && b > a) { try { return JSON.parse(s.slice(a, b + 1)); } catch {} }
+  return null;
+}
+function usageLine(u) {
+  if (!u) return '';
+  const parts = [];
+  if (u.prompt_tokens != null) parts.push(fmtN(u.prompt_tokens) + ' → ' + fmtN(u.completion_tokens) + ' tok');
+  if (u.cost != null) parts.push('$' + Number(u.cost).toFixed(4));
+  return parts.join(' · ');
+}
+
+async function languageTool(text) {
+  const body = new URLSearchParams({ text: text.slice(0, 18000), language: 'pl-PL' });
+  const r = await fetch('https://api.languagetool.org/v2/check', { method: 'POST', body });
+  if (!r.ok) throw new Error('LT ' + r.status);
+  const j = await r.json();
+  return (j.matches || []).map(m => ({
+    bad: text.substr(m.offset, m.length),
+    ctx: text.slice(Math.max(0, m.offset - 25), m.offset + m.length + 25).replace(/\s+/g, ' '),
+    msg: m.message, rep: (m.replacements || []).slice(0, 3).map(x => x.value),
+  }));
+}
+
+/* ============================== Budowa kontekstu ============================== */
+function wordSet(t) { return new Set(((t || '').toLowerCase().match(/\p{L}{5,}/gu) || []).map(w => w.slice(0, 6))); }
+function overlap(a, b) { let n = 0; for (const x of a) if (b.has(x)) n++; return n; }
+
+function scenesBefore(p, sc) {
+  const out = [];
+  for (const c of p.chapters) for (const s of c.scenes) { if (s.id === sc.id) return out; out.push({ c, s }); }
+  return out;
+}
+function relevantEvents(p, sc, present, limit = 24) {
+  const q = wordSet(sc.plan + ' ' + sc.title);
+  const evs = p.events.map((e, i) => {
+    let score = 0;
+    for (const id of e.who || []) if (present.includes(id)) score += 3;
+    score += overlap(wordSet(e.text + ' ' + (e.consequence || '')), q);
+    if (e.important) score += 2;
+    score += i / Math.max(1, p.events.length);
+    return { e, i, score };
+  });
+  const last = new Set(evs.slice(-5).map(x => x.i));
+  const picked = evs.filter(x => !last.has(x.i)).sort((a, b) => b.score - a.score).slice(0, limit - last.size);
+  const all = [...picked, ...evs.filter(x => last.has(x.i))].sort((a, b) => a.i - b.i);
+  return all.map(x => x.e);
+}
+function relevantThreads(p, sc, present, limit = 12) {
+  const q = wordSet(sc.plan);
+  return p.threads.filter(t => t.status === 'open')
+    .map(t => ({ t, s: (t.who || []).filter(id => present.includes(id)).length * 3 + overlap(wordSet(t.text), q) }))
+    .sort((a, b) => b.s - a.s).slice(0, limit).map(x => x.t);
+}
+function charCard(c, full) {
+  const L = [`### ${c.name}${c.aliases ? ' (' + c.aliases + ')' : ''}${c.role ? ' — ' + c.role : ''}`];
+  if (c.description) L.push('Kim jest: ' + c.description);
+  if (full) {
+    if (c.motivation) L.push('Motywacja: ' + c.motivation);
+    if (c.voice) L.push('Sposób mówienia: ' + c.voice);
+    if (c.relations) L.push('Relacje: ' + c.relations);
+    if (c.changes?.length) L.push('Zmiany w toku opowieści: ' + c.changes.slice(-8).join('; '));
+    if (c.knows?.length) L.push('WIE: ' + c.knows.slice(-15).join('; '));
+    if (c.unknown) L.push('NIE WIE (nie może się tym posługiwać ani o tym wspominać): ' + c.unknown);
+  }
+  return L.join('\n');
+}
+function evLine(p, e) {
+  const ci = chapterIndex(e.chapterId);
+  return `- [${ci >= 0 ? 'R' + (ci + 1) : '—'}] ${e.text}${e.consequence ? ' → ' + e.consequence : ''}`;
+}
+function lastEndings(p, sc, n = 3) {
+  return scenesBefore(p, sc).filter(x => x.s.text).slice(-n).map(x => splitParas(x.s.text).slice(-2).join(' ').slice(-240));
+}
+function pickEnding(p, sc) {
+  const recent = scenesBefore(p, sc).slice(-3).map(x => x.s.endingUsed).filter(Boolean);
+  const pool = Object.keys(ENDINGS).filter(k => !recent.includes(k));
+  return pool[Math.floor(Math.random() * pool.length)] || 'cliff';
+}
+
+const WRITER_SYS = `Jesteś współautorem powieści i piszesz po polsku jak doświadczony polski prozaik: naturalną, poprawną polszczyzną (odmiana, składnia, interpunkcja, aspekt czasowników), nie jak tłumaczenie.
+
+Zasady:
+- Trzymaj się kanonu z sekcji PAMIĘĆ. Postać wie tylko to, co ma w polu WIE. Nigdy nie daje po sobie poznać rzeczy z pola NIE WIE.
+- Postacie mówią swoim głosem (Sposób mówienia) i działają zgodnie z motywacjami. Jeśli działają wbrew nim, musi to wynikać z sytuacji.
+- Nawiązuj do wcześniejszych wydarzeń i otwartych wątków, gdy to naturalne: konkretnym detalem, nie streszczeniem.
+- Pokazuj zamiast mówić. Konkret zamiast ogólników. Bez purpurowej prozy i bez patosu.
+- Zakończenie: nie kończ podsumowaniem, morałem ani refleksją narratora. Żadnych krótkich, jednozdaniowych akapitów-puent na końcu (np. „I to było wszystko.”, „To było jego.”, „Bo to było wieczne.”). Żadnej anafory „I to było…”. Czytelnik sam wyciąga wnioski.
+- Nie używaj fraz z listy ZAKAZANE ani ich parafraz.
+- Zwracasz wyłącznie tekst prozy. Bez tytułu, bez komentarzy, bez markdown.`;
+
+function memoryBlock(p, sc, present) {
+  const B = [];
+  if (p.style.guide.trim()) B.push('## STYL I ŚWIAT\n' + p.style.guide.trim());
+  if (p.style.sample.trim()) B.push('## PRÓBKA STYLU AUTORA (naśladuj rytm i słownictwo, nie treść)\n' + p.style.sample.trim().slice(0, 7000));
+  const pres = present.map(charById).filter(Boolean);
+  if (pres.length) B.push('## POSTACIE W SCENIE\n' + pres.map(c => charCard(c, true)).join('\n\n'));
+  const others = p.characters.filter(c => !present.includes(c.id));
+  if (others.length) B.push('## INNE POSTACIE (tło)\n' + others.map(c => `- ${c.name}${c.role ? ': ' + c.role : ''}${c.description ? '. ' + c.description.slice(0, 120) : ''}`).join('\n'));
+  // Historia: streszczenia poprzednich rozdziałów + scen bieżącego
+  const ch = chapterOf(sc.id) || curChapter();
+  const ci = chapterIndex(ch.id);
+  const H = [];
+  p.chapters.slice(0, ci).forEach((c, i) => {
+    const sum = c.summary || c.scenes.map(s => s.summary).filter(Boolean).join(' ');
+    if (sum) H.push(`R${i + 1}. ${c.title}: ${sum}`);
+  });
+  const before = ch.scenes.slice(0, ch.scenes.findIndex(s => s.id === sc.id));
+  before.forEach(s => { if (s.summary) H.push(`R${ci + 1}, ${s.title}: ${s.summary}`); });
+  if (H.length) B.push('## HISTORIA DOTĄD\n' + H.join('\n'));
+  const evs = relevantEvents(p, sc, present);
+  if (evs.length) B.push('## WAŻNE FAKTY I WYDARZENIA\n' + evs.map(e => evLine(p, e)).join('\n'));
+  const th = relevantThreads(p, sc, present);
+  if (th.length) B.push('## OTWARTE WĄTKI (materiał do nawiązań; nie musisz rozwiązywać)\n' + th.map(t => '- ' + t.text).join('\n'));
+  const banned = lines(p.banned);
+  if (banned.length) B.push('## ZAKAZANE\n' + banned.map(b => '- ' + b).join('\n'));
+  return '# PAMIĘĆ OPOWIEŚCI\n\n' + B.join('\n\n');
+}
+
+function buildWriterMessages(p, sc, mode, extra = {}) {
+  const present = sc.who || [];
+  const parts = [memoryBlock(p, sc, present)];
+  const prev = scenesBefore(p, sc).filter(x => x.s.text).slice(-1)[0];
+  if (prev && mode !== 'ideas') parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(-900));
+  const ends = lastEndings(p, sc);
+  if (mode === 'scene') {
+    const e = ENDINGS[extra.ending];
+    parts.push(`# ZADANIE
+Napisz scenę „${sc.title}”, około ${sc.words} słów.
+Plan sceny: ${sc.plan.trim() || '(brak, poprowadź akcję naturalnie dalej, korzystając z otwartych wątków)'}
+Postacie obecne: ${whoNames(present).join(', ') || 'według planu'}.
+Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończyły się tak. Nie kończ podobnie ani podobną konstrukcją:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
+  } else if (mode === 'continue') {
+    parts.push('# TEKST SCENY DO TEJ PORY\n' + sc.text + `\n\n# ZADANIE\nKontynuuj tę scenę dokładnie od miejsca, w którym się urywa (około 300–500 słów). Nie powtarzaj tego, co już jest. Plan sceny: ${sc.plan.trim() || '—'}`);
+  } else if (mode === 'ending') {
+    const e = extra.ending ? ENDINGS[extra.ending] : null;
+    parts.push('# SCENA BEZ ZAKOŃCZENIA\n' + extra.base + `\n\n# ZADANIE\nNapisz WYŁĄCZNIE zakończenie tej sceny: 1–3 akapity, które płynnie kontynuują ostatnie zdanie. Nie powtarzaj tekstu, który już jest.` + (e ? `\nTyp zakończenia (${e.label}): ${e.ins}` : '') + (ends.length ? `\nNie kończ podobnie do poprzednich scen:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
+  } else if (mode === 'ideas') {
+    parts.push(`# ZADANIE
+Zaproponuj 5 wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz. Przynajmniej jeden pomysł ma być zaskakujący.
+Format: każdy pomysł w osobnej linii, dokładnie tak:
+TYTUŁ :: plan sceny w 2–3 zdaniach
+Bez numeracji, bez wstępu, bez komentarzy.`);
+  }
+  return [{ role: 'system', content: WRITER_SYS }, { role: 'user', content: parts.join('\n\n') }];
+}
+
+const EDITOR_SYS = `Jesteś korektorem i redaktorem językowym polskiej prozy. Poprawiasz WYŁĄCZNIE:
+- błędy ortograficzne, literówki, błędną odmianę i składnię, interpunkcję,
+- kalki z angielskiego i niepolskie konstrukcje,
+- zdania niegramatyczne albo nielogiczne (minimalną ingerencją),
+- powtórzenia tego samego słowa w bliskim sąsiedztwie.
+NIE zmieniasz fabuły, kolejności, stylu, tonu, długości ani treści dialogów (poza błędami). Nie dodajesz zdań. Zachowujesz podział na akapity.
+Zwróć cały poprawiony tekst i nic więcej.`;
+
+const MEMORY_SYS = `Jesteś archiwistą powieści. Czytasz nową scenę i aktualizujesz pamięć opowieści. Piszesz po polsku, zwięźle, samymi faktami (kto, co, komu, gdzie). Nie wymyślasz niczego, czego nie ma w scenie. Zwracasz WYŁĄCZNIE poprawny JSON.`;
+
+function buildExtractMessages(p, sc) {
+  const present = p.characters.filter(c => (sc.who || []).includes(c.id) || mentions(sc.text, c)).map(c => c.id);
+  const chars = p.characters.map(c => `- ${c.name}${c.aliases ? ' (' + c.aliases + ')' : ''}${c.role ? ': ' + c.role : ''}${present.includes(c.id) && c.knows?.length ? ' | wie: ' + c.knows.slice(-10).join('; ') : ''}${present.includes(c.id) && c.unknown ? ' | NIE wie: ' + c.unknown : ''}`).join('\n') || '(brak)';
+  const th = p.threads.filter(t => t.status === 'open').map(t => `- ${t.id}: ${t.text}`).join('\n') || '(brak)';
+  const evs = relevantEvents(p, sc, present, 20).map(e => evLine(p, e)).join('\n') || '(brak)';
+  const user = `ZNANE POSTACIE:
+${chars}
+
+OTWARTE WĄTKI (z identyfikatorami):
+${th}
+
+ZNANE FAKTY (kanon):
+${evs}
+
+NOWA SCENA „${sc.title}”:
+${sc.text}
+
+Zwróć JSON dokładnie w tym kształcie:
+{
+  "summary": "streszczenie sceny w 2–4 zdaniach",
+  "events": [{"text": "fakt: co się stało", "who": ["Imię"], "consequence": "skutek albo pusty tekst", "important": true}],
+  "knowledge": [{"character": "Imię", "learned": "czego ta postać dowiedziała się w tej scenie"}],
+  "character_updates": [{"character": "Imię", "change": "trwała zmiana: relacja, stan, decyzja"}],
+  "new_characters": [{"name": "Imię", "description": "kim jest, jedno zdanie"}],
+  "threads_opened": [{"text": "nowa zagadka, obietnica, zapowiedź albo niewyjaśniony detal", "who": ["Imię"]}],
+  "threads_closed": [{"id": "identyfikator z listy", "resolution": "jak się rozwiązał"}],
+  "continuity": ["sprzeczność sceny z kanonem albo z tym, co postać może wiedzieć; pusta lista, jeśli brak"]
+}
+Wydarzenia: 2–8 najważniejszych faktów, nie opisy nastroju. "important": true tylko dla faktów, które będą miały znaczenie później. Nie dodawaj jako nowe postaci, które są już na liście znanych.`;
+  return [{ role: 'system', content: MEMORY_SYS }, { role: 'user', content: user }];
+}
+
+/* ============================== Wykrywacz tików ============================== */
+const ANAPHORA = /^((i|bo|a|ale)\s+)?to\s+(było|był|była|byli|były|jest|będzie|wystarcz\p{L}*)\b/iu;
+const REFLECT = /(nic już nie (będzie|było)|po raz pierwszy od (dawna|lat)|w głębi (duszy|serca)|tak właśnie (miało|musiało)|wiedział(a)?, że (to|teraz|już))/iu;
+function detectTics(text, p) {
+  const out = [];
+  const paras = splitParas(text);
+  if (paras.length < 2) return { tics: out, shortTail: 0 };
+  let shortTail = 0;
+  for (let i = paras.length - 1; i >= Math.max(0, paras.length - 4); i--) {
+    const s = paras[i];
+    if (wc(s) <= 8 && !/^[„"–—-]/.test(s)) shortTail++; else break;
+  }
+  if (shortTail >= 2) out.push({ id: 'puenta', label: `Puenta na końcu: ${shortTail} krótkie akapity jeden pod drugim` });
+  const tail = paras.slice(-3);
+  const ana = tail.filter(s => ANAPHORA.test(s));
+  if (ana.length) out.push({ id: 'anafora', label: 'Zakończenie typu „I to było…”: ' + ana.map(s => '„' + s.slice(0, 60) + '”').join(', ') });
+  if (REFLECT.test(paras[paras.length - 1])) out.push({ id: 'refleksja', label: 'Refleksja narratora w ostatnim akapicie' });
+  const low = text.toLowerCase();
+  const hit = lines(p.banned).filter(b => low.includes(b.toLowerCase()));
+  if (hit.length) out.push({ id: 'zakazane', label: 'Zakazane frazy: ' + hit.map(h => '„' + h + '”').join(', ') });
+  return { tics: out, shortTail };
+}
+function endingTicCount(p, ch, exceptId) {
+  return ch.scenes.filter(s => s.id !== exceptId && s.status === 'accepted' && s.tickEnding).length;
+}
+
+/* ============================== Diff słów ============================== */
+function tokenize(s) { return s.match(/\s*\S+/g) || []; }
+function lcsOps(a, b) {
+  const n = a.length, m = b.length;
+  if (n * m > 4e6) return [{ t: 'del', s: a.join('') }, { t: 'ins', s: b.join('') }];
+  const W = m + 1, dp = new Uint32Array((n + 1) * W);
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i * W + j] = a[i].trim() === b[j].trim() ? dp[(i + 1) * W + j + 1] + 1 : Math.max(dp[(i + 1) * W + j], dp[i * W + j + 1]);
+  const ops = []; let i = 0, j = 0;
+  const push = (t, s) => { const l = ops[ops.length - 1]; if (l && l.t === t) l.s += s; else ops.push({ t, s }); };
+  while (i < n && j < m) {
+    if (a[i].trim() === b[j].trim()) { push('eq', b[j]); i++; j++; }
+    else if (dp[(i + 1) * W + j] >= dp[i * W + j + 1]) { push('del', a[i]); i++; }
+    else { push('ins', b[j]); j++; }
+  }
+  while (i < n) push('del', a[i++]);
+  while (j < m) push('ins', b[j++]);
+  return ops;
+}
+function diffHunks(orig, fixed) {
+  const pa = splitParas(orig), pb = splitParas(fixed);
+  let ops = [];
+  if (pa.length === pb.length) {
+    pa.forEach((x, k) => { if (k) ops.push({ t: 'eq', s: '\n\n' }); ops.push(...lcsOps(tokenize(x), tokenize(pb[k]))); });
+  } else {
+    ops = lcsOps(tokenize(joinParas(pa)), tokenize(joinParas(pb)));
+  }
+  // scal del+ins w hunki
+  const segs = [];
+  for (const o of ops) {
+    if (o.t === 'eq') segs.push({ eq: o.s });
+    else {
+      let h = segs[segs.length - 1];
+      if (!h || h.eq != null) { h = { del: '', ins: '', on: true }; segs.push(h); }
+      h[o.t] += o.s;
+    }
+  }
+  return segs;
+}
+function applyHunks(segs) { return segs.map(s => s.eq != null ? s.eq : (s.on ? s.ins : s.del)).join('').replace(/[ \t]+\n/g, '\n').trim(); }
+
+/* ============================== Arkusz ============================== */
+function openSheet(title, html) {
+  const s = $('#sheet');
+  s.innerHTML = `<div class="sheet-bg" data-a="closeSheet"></div><div class="sheet-panel" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sheet-head"><h2>${esc(title)}</h2><button class="icon-btn" data-a="closeSheet" aria-label="Zamknij">×</button></div><div class="sheet-body" id="sheetBody">${html}</div></div>`;
+  s.hidden = false; document.body.classList.add('noscroll');
+  s.querySelectorAll('textarea.auto').forEach(autosize);
+  return $('#sheetBody');
+}
+function setSheet(html) { const b = $('#sheetBody'); if (b) { b.innerHTML = html; b.querySelectorAll('textarea.auto').forEach(autosize); } }
+function closeSheet() { const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; document.body.classList.remove('noscroll'); S.ui = {}; }
+const loader = msg => `<div class="row muted"><span class="spinner"></span> ${esc(msg)}</div><div class="skel"></div><div class="skel"></div>`;
+
+/* ============================== Widoki ============================== */
+function render() {
+  $('#projName').textContent = S.project?.title || 'Brak projektu';
+  $$('.nav button').forEach(b => b.setAttribute('aria-current', b.dataset.id === S.view ? 'page' : 'false'));
+  const v = $('#view');
+  if (!S.project) { v.innerHTML = `<div class="card"><h2 class="sec">Brak projektu</h2><button class="btn primary" data-a="openProjects">Utwórz opowieść</button></div>`; return; }
+  v.innerHTML = ({ write: viewWrite, memory: viewMemory, book: viewBook, style: viewStyle, settings: viewSettings })[S.view]();
+  v.querySelectorAll('textarea.auto').forEach(autosize);
+  if (S.view === 'write' && curScene()) updateTicBanner();
+}
+
+function keyBanner() {
+  const w = S.settings.roles.writer;
+  if (w.provider === 'openrouter' && !S.settings.orKey) return `<div class="banner info"><div><b>Dodaj klucz OpenRouter</b>, żeby generować sceny. Jeden klucz daje dostęp do Kimi i wszystkich innych modeli.</div><div><button class="btn sm primary" data-a="nav" data-id="settings">Przejdź do ustawień</button></div></div>`;
+  return '';
+}
+
+function viewWrite() {
+  const p = S.project, ch = curChapter(), sc = curScene();
+  if (sc) return viewScene(p, sc);
+  const opts = p.chapters.map((c, i) => `<option value="${c.id}" ${c.id === ch.id ? 'selected' : ''}>${esc(c.title || 'Rozdział ' + (i + 1))}</option>`).join('');
+  const scenes = ch.scenes.map(s => `<button class="item" data-a="openScene" data-id="${s.id}">
+      <div class="body"><span class="t">${esc(s.title)}</span><span class="d">${esc(s.summary || s.plan || (s.text ? s.text.slice(0, 160) : 'Pusta scena'))}</span></div>
+      <div class="side">${s.status === 'accepted' ? '<span class="tag ok">w pamięci</span>' : '<span class="tag">szkic</span>'}<span class="small muted">${fmtN(wc(s.text))} sł.</span></div></button>`).join('');
+  return `${keyBanner()}
+  ${p.sample ? `<div class="banner info"><div>To jest <b>przykładowa opowieść</b>, żebyś zobaczył, jak działa pamięć. Zajrzyj do zakładki Pamięć, a potem utwórz własny projekt z menu na górze.</div></div>` : ''}
+  <div class="row"><select class="grow" id="chapterSel" aria-label="Rozdział">${opts}</select>
+    <button class="btn" data-a="chapterMenu">Rozdział…</button></div>
+  <div class="list">${scenes || '<div class="empty">Ten rozdział nie ma jeszcze scen.</div>'}</div>
+  <div class="row"><button class="btn primary grow" data-a="newScene">Nowa scena</button><button class="btn grow" data-a="importText">Wklej gotowy tekst</button></div>
+  <p class="hint">Każda zatwierdzona scena trafia do pamięci: archiwista wyciąga z niej wydarzenia, wiedzę postaci i otwarte wątki. Przy kolejnych scenach model dostaje tylko to, co istotne.</p>`;
+}
+
+function viewScene(p, sc) {
+  const ch = chapterOf(sc.id);
+  const chips = p.characters.map(c => `<button class="chip" data-a="toggleWho" data-id="${c.id}" aria-pressed="${(sc.who || []).includes(c.id)}">${esc(c.name)}</button>`).join('') || '<span class="hint">Brak postaci. Dodaj je w zakładce Pamięć.</span>';
+  const endOpts = `<option value="auto" ${sc.ending === 'auto' ? 'selected' : ''}>Losuj (inne niż ostatnio)</option>` + Object.entries(ENDINGS).map(([k, e]) => `<option value="${k}" ${sc.ending === k ? 'selected' : ''}>${e.label}</option>`).join('');
+  const lenOpts = Object.entries(LENGTHS).map(([k, l]) => `<option value="${k}" ${String(sc.words) === k ? 'selected' : ''}>${l}</option>`).join('');
+  const busy = !!GEN;
+  const hasText = !!sc.text.trim();
+  return `${keyBanner()}
+  <div class="row"><button class="btn ghost" data-a="backToScenes">← ${esc(ch?.title || 'Sceny')}</button>
+    <span style="margin-left:auto">${sc.status === 'accepted' ? '<span class="tag ok">w pamięci</span>' : '<span class="tag">szkic</span>'}</span></div>
+  <input class="scene-title" type="text" id="sceneTitle" data-f="scene.title" value="${esc(sc.title)}" aria-label="Tytuł sceny">
+  <details class="plan card" ${hasText ? '' : 'open'}>
+    <summary><span class="label">Plan sceny</span></summary><div class="stack">
+    <label class="field"><span>Co się dzieje</span><textarea class="auto" id="scenePlan" data-f="scene.plan" placeholder="Np. Hanna konfrontuje Tomka w porcie. On kłamie o tamtej nocy, ona to wyczuwa, ale nie zdradza listu.">${esc(sc.plan)}</textarea></label>
+    <div class="field"><span>Kto jest w scenie</span><div class="chips">${chips}</div>
+      ${p.characters.length ? '<div><button class="btn ghost sm" data-a="detectWho">Wykryj z planu</button></div>' : ''}</div>
+    <div class="row"><label class="field grow"><span>Zakończenie</span><select id="sceneEnding" data-f="scene.ending">${endOpts}</select></label>
+      <label class="field grow"><span>Długość</span><select id="sceneWords" data-f="scene.words">${lenOpts}</select></label></div>
+    <div class="row">
+      <button class="btn primary grow" data-a="generate" ${busy ? 'disabled' : ''}>${hasText ? 'Napisz od nowa' : 'Napisz scenę'}</button>
+      <button class="btn grow" data-a="ideas" ${busy ? 'disabled' : ''}>Pomysły</button>
+      <button class="btn ghost" data-a="preview">Co widzi model</button>
+    </div>
+    <div class="hint" id="ctxSize">Kontekst: ~${fmtN(estTok(buildWriterMessages(p, sc, 'scene', { ending: 'cliff' }).map(m => m.content).join('')))} tokenów</div>
+  </div></details>
+  <div id="ticBanner"></div>
+  <textarea class="prose auto ${busy ? 'streaming' : ''}" id="sceneText" data-f="scene.text" placeholder="Tu pojawi się scena. Możesz też pisać sam: model i archiwista pracują na tym, co tu jest." aria-label="Tekst sceny">${esc(sc.text)}</textarea>
+  <div class="meta-line"><span>${fmtN(wc(sc.text))} słów</span>${sc.endingUsed ? `<span>Zakończenie: ${ENDINGS[sc.endingUsed]?.label || ''}</span>` : ''}${sc.usage ? `<span class="mono">${esc(usageLine(sc.usage))}</span>` : ''}</div>
+  ${busy ? `<button class="btn block" data-a="stop"><span class="spinner"></span> Zatrzymaj</button>` : `
+  <div class="actions">
+    <button class="btn" data-a="editorPass" ${hasText ? '' : 'disabled'}>Redakcja</button>
+    <button class="btn" data-a="endings" ${hasText ? '' : 'disabled'}>Inne zakończenia</button>
+    <button class="btn" data-a="continue" ${hasText ? '' : 'disabled'}>Dopisz dalej</button>
+    ${sc.history?.length ? `<button class="btn" data-a="undo">Cofnij zmianę</button>` : ''}
+  </div>
+  <button class="btn primary block" data-a="accept" ${hasText ? '' : 'disabled'}>${sc.status === 'accepted' ? 'Zaktualizuj pamięć ponownie' : 'Zatwierdź scenę i zapisz w pamięci'}</button>
+  <button class="btn ghost danger" data-a="delScene">Usuń scenę</button>`}`;
+}
+
+function updateTicBanner() {
+  const el = $('#ticBanner'); const sc = curScene(); if (!el || !sc) return;
+  if (!S.project.tics.detect || GEN || !sc.text.trim()) { el.innerHTML = ''; return; }
+  const { tics, shortTail } = detectTics(sc.text, S.project);
+  if (!tics.length) { el.innerHTML = ''; return; }
+  const ch = chapterOf(sc.id);
+  const endingTic = tics.some(t => t.id !== 'zakazane');
+  const used = endingTicCount(S.project, ch, sc.id);
+  const over = endingTic && used >= S.project.tics.budget;
+  el.innerHTML = `<div class="banner warn"><div><b>Wykryte tiki</b>${over ? ` · w tym rozdziale był już ${used} taki koniec (limit: ${S.project.tics.budget})` : ''}</div>
+    <div class="stack small">${tics.map(t => '<div>• ' + esc(t.label) + '</div>').join('')}</div>
+    <div class="row">${shortTail >= 2 ? '<button class="btn sm" data-a="cutTail">Utnij puentę</button>' : ''}${endingTic ? '<button class="btn sm" data-a="endings">Daj 3 inne zakończenia</button>' : ''}</div></div>`;
+}
+
+function viewMemory() {
+  const p = S.project;
+  const tabs = [['chars', 'Postacie'], ['events', 'Wydarzenia'], ['threads', 'Wątki'], ['chapters', 'Rozdziały']];
+  let body = '';
+  if (S.memTab === 'chars') {
+    body = `<div class="list">${p.characters.map(c => `<button class="item" data-a="editChar" data-id="${c.id}"><div class="body"><span class="t">${esc(c.name)} ${c.role ? `<span class="muted small">· ${esc(c.role)}</span>` : ''}</span><span class="d">${esc(c.description || c.motivation || 'Bez opisu')}</span></div><div class="side"><span class="tag acc">wie: ${c.knows?.length || 0}</span></div></button>`).join('') || '<div class="empty">Brak postaci. Dodaj je ręcznie albo zatwierdź scenę, a archiwista zaproponuje nowe.</div>'}</div>
+    <button class="btn primary" data-a="editChar">Dodaj postać</button>
+    <p class="hint">Pola „Wie” i „Nie wie” pilnują, żeby postać nie zdradziła informacji, których nie ma prawa znać. „Wie” uzupełnia się samo po każdej scenie.</p>`;
+  } else if (S.memTab === 'events') {
+    const filt = S.evFilter;
+    const fopts = `<option value="">Wszystkie postacie</option>` + p.characters.map(c => `<option value="${c.id}" ${filt === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+    let html = '';
+    p.chapters.forEach((ch, i) => {
+      const evs = p.events.filter(e => e.chapterId === ch.id && (!filt || (e.who || []).includes(filt)));
+      if (!evs.length) return;
+      html += `<div class="chap-head">R${i + 1} · ${esc(ch.title)}</div>` + evs.map(e => `<button class="item" data-a="editEvent" data-id="${e.id}"><div class="body"><span>${esc(e.text)}</span>${e.consequence ? `<span class="d">→ ${esc(e.consequence)}</span>` : ''}${e.who?.length ? `<span class="small muted">${esc(whoNames(e.who).join(', '))}</span>` : ''}</div><div class="side">${e.important ? '<span class="tag warn">ważne</span>' : ''}</div></button>`).join('');
+    });
+    const orphan = p.events.filter(e => chapterIndex(e.chapterId) < 0 && (!filt || (e.who || []).includes(filt)));
+    if (orphan.length) html += `<div class="chap-head">Bez rozdziału</div>` + orphan.map(e => `<button class="item" data-a="editEvent" data-id="${e.id}"><div class="body"><span>${esc(e.text)}</span></div></button>`).join('');
+    body = `<select id="evFilter" aria-label="Filtruj po postaci">${fopts}</select>
+    <div class="list">${html || '<div class="empty">Brak wydarzeń. Pojawią się po zatwierdzeniu sceny.</div>'}</div>
+    <button class="btn primary" data-a="editEvent">Dodaj wydarzenie</button>
+    <p class="hint">Oznaczone jako „ważne” mają pierwszeństwo, gdy model dostaje fakty do sceny. Łącznie: ${p.events.length}.</p>`;
+  } else if (S.memTab === 'threads') {
+    const row = t => `<button class="item" data-a="editThread" data-id="${t.id}"><div class="body"><span>${esc(t.text)}</span>${t.resolution ? `<span class="d">Rozwiązanie: ${esc(t.resolution)}</span>` : ''}${t.who?.length ? `<span class="small muted">${esc(whoNames(t.who).join(', '))}</span>` : ''}</div><div class="side">${t.status === 'open' ? '<span class="tag acc">otwarty</span>' : '<span class="tag ok">zamknięty</span>'}</div></button>`;
+    const open = p.threads.filter(t => t.status === 'open'), closed = p.threads.filter(t => t.status !== 'open');
+    body = `<div class="label">Otwarte (${open.length})</div><div class="list">${open.map(row).join('') || '<div class="empty">Brak otwartych wątków.</div>'}</div>
+    ${closed.length ? `<div class="label">Zamknięte (${closed.length})</div><div class="list">${closed.map(row).join('')}</div>` : ''}
+    <button class="btn primary" data-a="editThread">Dodaj wątek</button>
+    <p class="hint">Wątki to zagadki, obietnice i „strzelby Czechowa”. Model dostaje je jako materiał do nawiązań, a archiwista sam je zamyka, gdy się rozwiążą.</p>`;
+  } else {
+    body = p.chapters.map((ch, i) => `<div class="card"><div class="row"><h3 class="grow">R${i + 1} · ${esc(ch.title)}</h3><button class="btn sm" data-a="summarize" data-id="${ch.id}">Streść</button></div>
+      <textarea class="auto" id="sum_${ch.id}" data-f="chap:${ch.id}.summary" placeholder="Streszczenie rozdziału. Model dostaje je zamiast pełnego tekstu w kolejnych rozdziałach.">${esc(ch.summary)}</textarea>
+      <span class="hint">${ch.scenes.length} scen · ${fmtN(ch.scenes.reduce((a, s) => a + wc(s.text), 0))} słów</span></div>`).join('');
+  }
+  return `<h2 class="sec">Pamięć opowieści</h2>
+  <div class="seg" role="group" aria-label="Rodzaj pamięci">${tabs.map(([k, l]) => `<button data-a="memTab" data-id="${k}" aria-pressed="${S.memTab === k}">${l}</button>`).join('')}</div>${body}`;
+}
+
+function viewStyle() {
+  const p = S.project;
+  return `<h2 class="sec">Styl</h2>
+  <div class="card">
+    <label class="field"><span>Tytuł opowieści</span><input type="text" id="projTitle" data-f="project.title" value="${esc(p.title)}"></label>
+    <label class="field"><span>Wytyczne stylu i świata</span><textarea class="auto" id="styleGuide" data-f="style.guide" placeholder="Narrator, czas, POV, ton, gatunek, realia, czego unikać.">${esc(p.style.guide)}</textarea></label>
+  </div>
+  <div class="card">
+    <label class="field"><span>Próbka Twojej prozy</span><textarea class="auto" id="styleSample" data-f="style.sample" placeholder="Wklej 1–3 strony swojego tekstu. Model naśladuje rytm i słownictwo, nie treść.">${esc(p.style.sample)}</textarea></label>
+    <span class="hint">${fmtN(wc(p.style.sample))} słów. Najlepiej działa 500–1500.</span>
+  </div>
+  <div class="card">
+    <label class="field"><span>Zakazane frazy (jedna w linii)</span><textarea class="auto" id="banned" data-f="project.banned">${esc(p.banned)}</textarea></label>
+    <span class="hint">Model dostaje tę listę w każdym zapytaniu, a wykrywacz podkreśla je w gotowym tekście.</span>
+  </div>
+  <div class="card">
+    <div class="label">Tiki w zakończeniach</div>
+    <label class="toggle"><span>Wykrywaj puenty i „I to było…”</span><input type="checkbox" id="ticDetect" data-f="tics.detect" ${p.tics.detect ? 'checked' : ''}></label>
+    <label class="field"><span>Ile takich zakończeń dopuszczasz na rozdział</span><input type="number" id="ticBudget" min="0" max="20" data-f="tics.budget" value="${p.tics.budget}"></label>
+  </div>`;
+}
+
+function viewSettings() {
+  const st = S.settings, p = S.project;
+  const roleCard = role => {
+    const r = st.roles[role], I = ROLE_INFO[role];
+    return `<div class="card"><div><h3>${I.name}</h3><span class="hint">${I.desc}</span></div>
+      <div class="row"><label class="field grow"><span>Dostawca</span><select id="prov_${role}" data-f="role_${role}.provider">
+        <option value="openrouter" ${r.provider === 'openrouter' ? 'selected' : ''}>OpenRouter</option>
+        <option value="custom" ${r.provider === 'custom' ? 'selected' : ''}>${esc(st.customName || 'Własny endpoint')}</option></select></label></div>
+      <label class="field"><span>Model</span><div class="row"><input class="grow mono" type="text" id="model_${role}" data-f="role_${role}.model" value="${esc(r.model)}" autocapitalize="off" autocorrect="off" spellcheck="false">
+        ${r.provider === 'openrouter' ? `<button class="btn" data-a="pickModel" data-id="${role}">Wybierz</button>` : ''}</div></label>
+      <label class="field"><span>Temperatura: <b id="tv_${role}">${r.temp}</b></span><input type="range" id="temp_${role}" min="0" max="1.3" step="0.05" value="${r.temp}" data-f="role_${role}.temp"></label>
+    </div>`;
+  };
+  const sft = p?.dataset.sft.length || 0, dpo = p?.dataset.dpo.length || 0;
+  return `<h2 class="sec">Ustawienia</h2>
+  <div class="card">
+    <label class="field"><span>Klucz OpenRouter</span><input type="password" id="orKey" data-f="settings.orKey" value="${esc(st.orKey)}" placeholder="sk-or-…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <span class="hint">Klucz założysz na <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>. Zostaje tylko na tym urządzeniu.</span>
+    <button class="btn" data-a="testConn">Sprawdź połączenie (Pisarz)</button>
+  </div>
+  <div class="card">
+    <div class="label">Prywatność</div>
+    <label class="toggle"><span>Tylko dostawcy, którzy nie trenują na moich tekstach</span><input type="checkbox" id="deny" data-f="settings.denyTraining" ${st.denyTraining ? 'checked' : ''}></label>
+    <label class="toggle"><span>Tylko zero przechowywania danych (ZDR)</span><input type="checkbox" id="zdr" data-f="settings.zdr" ${st.zdr ? 'checked' : ''}></label>
+    <span class="hint">ZDR mocniej zawęża listę dostawców. Jeśli model przestanie odpowiadać, wyłącz ZDR. Na koncie OpenRouter możesz to też ustawić na stałe w zakładce Privacy.</span>
+  </div>
+  ${roleCard('writer')}
+  <div class="card"><label class="field"><span>Myślenie pisarza przed pisaniem</span><select id="reasoning" data-f="settings.reasoning">
+    ${[['off', 'Wyłączone (najtaniej)'], ['low', 'Niskie'], ['medium', 'Średnie'], ['high', 'Wysokie (drożej, lepszy plan sceny)']].map(([k, l]) => `<option value="${k}" ${st.reasoning === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <span class="hint">Tokeny myślenia liczą się jak wyjście. Przy Kimi K3 zacznij od niskiego.</span></div>
+  ${roleCard('editor')}
+  <div class="card"><label class="toggle"><span>Przed redakcją sprawdź tekst w LanguageTool</span><input type="checkbox" id="lt" data-f="settings.lt" ${st.lt ? 'checked' : ''}></label>
+    <span class="hint">Darmowy korektor regułowy. Jego uwagi trafiają do redaktora jako podpowiedzi. Wysyła tekst do api.languagetool.org.</span></div>
+  ${roleCard('memory')}
+  <div class="card">
+    <div class="label">Własny endpoint (zgodny z OpenAI)</div>
+    <label class="field"><span>Nazwa</span><input type="text" id="cName" data-f="settings.customName" value="${esc(st.customName)}"></label>
+    <label class="field"><span>Adres bazowy</span><input type="url" id="cBase" data-f="settings.customBase" value="${esc(st.customBase)}" placeholder="https://api.groq.com/openai/v1" autocapitalize="off" spellcheck="false"></label>
+    <label class="field"><span>Klucz</span><input type="password" id="cKey" data-f="settings.customKey" value="${esc(st.customKey)}" autocomplete="off"></label>
+    <span class="hint">Tu podepniesz Groq, Fireworks, Twój wytrenowany model w chmurze albo Ollamę przez Tailscale. Endpoint musi akceptować zapytania z przeglądarki (CORS).</span>
+  </div>
+  <div class="card">
+    <div class="label">Dataset pod Twój fine-tune</div>
+    <div class="meta-line"><span>Scen z poprawkami (SFT): <b>${sft}</b></span><span>Wyborów zakończeń (DPO): <b>${dpo}</b></span></div>
+    <span class="hint">Apka sama zbiera pary „co napisał model → Twoja wersja” i „wybrane zakończenie → odrzucone”. Format JSONL pasuje do Unsloth i TRL.</span>
+    <div class="row"><button class="btn grow" data-a="exportSFT" ${sft ? '' : 'disabled'}>Eksport SFT</button><button class="btn grow" data-a="exportDPO" ${dpo ? '' : 'disabled'}>Eksport DPO</button></div>
+  </div>
+  <div class="card">
+    <div class="label">Kopia zapasowa</div>
+    <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
+    <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
+  </div>
+  <p class="hint mono">Wydane przez Atrament: $${(st.spent || 0).toFixed(4)} · wersja 1.1</p>`;
+}
+
+/* ============================== Edycja pól ============================== */
+function scopeObj(scope) {
+  if (scope === 'scene') return curScene();
+  if (scope === 'project') return S.project;
+  if (scope === 'style') return S.project.style;
+  if (scope === 'tics') return S.project.tics;
+  if (scope === 'book') return S.project.book;
+  if (scope === 'settings') return S.settings;
+  if (scope.startsWith('role_')) return S.settings.roles[scope.slice(5)];
+  if (scope.startsWith('chap:')) return S.project.chapters.find(c => c.id === scope.slice(5));
+  return null;
+}
+let ctxT = null;
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (el.id === 'chapterSel') { S.project.currentChapter = el.value; saveProject(); render(); return; }
+  if (el.id === 'evFilter') { S.evFilter = el.value; render(); return; }
+  if (el.id === 'modelSearch') { renderModelList(el.value); return; }
+  const f = el.dataset.f; if (!f) return;
+  const dot = f.lastIndexOf('.'); const scope = f.slice(0, dot), key = f.slice(dot + 1);
+  const obj = scopeObj(scope); if (!obj) return;
+  let v = el.type === 'checkbox' ? el.checked : el.value;
+  if (el.type === 'number' || el.type === 'range' || key === 'words') v = Number(v);
+  obj[key] = v;
+  if (el.classList.contains('auto')) autosize(el);
+  if (scope === 'settings' || scope.startsWith('role_')) {
+    saveSettings();
+    if (el.type === 'range') { const t = $('#tv_' + scope.slice(5)); if (t) t.textContent = v; }
+    if (key === 'provider') render();
+  } else saveProject();
+  if (scope === 'project' && key === 'title') $('#projName').textContent = v;
+  if (scope === 'scene' && key === 'text') updateTicBanner();
+  if (scope === 'scene' && key === 'plan') {
+    clearTimeout(ctxT); ctxT = setTimeout(() => { const c = $('#ctxSize'), sc = curScene(); if (c && sc) c.textContent = 'Kontekst: ~' + fmtN(estTok(buildWriterMessages(S.project, sc, 'scene', { ending: 'cliff' }).map(m => m.content).join(''))) + ' tokenów'; }, 400);
+  }
+});
+
+/* ============================== Akcje ============================== */
+let GEN = null;
+const A = {};
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  const fn = A[b.dataset.a]; if (!fn) return;
+  e.preventDefault();
+  Promise.resolve(fn(b.dataset.id, b)).catch(toastErr);
+});
+
+A.closeSheet = () => closeSheet();
+A.nav = id => { S.view = id; if (id !== 'write') { /* zostaw scenę otwartą */ } render(); scrollTo(0, 0); };
+A.memTab = id => { S.memTab = id; render(); };
+
+// --- projekty
+A.openProjects = () => {
+  const list = S.projects.map(x => `<div class="item"><div class="body"><span class="t">${esc(x.title)}</span><span class="small muted">${new Date(x.updated).toLocaleDateString('pl-PL')}</span></div><div class="side row">
+     ${x.id === S.project?.id ? '<span class="tag ok">otwarty</span>' : `<button class="btn sm" data-a="openProject" data-id="${x.id}">Otwórz</button>`}
+     <button class="btn sm danger" data-a="delProject" data-id="${x.id}">Usuń</button></div></div>`).join('');
+  openSheet('Opowieści', `<div class="list">${list || '<div class="empty">Brak</div>'}</div>
+    <label class="field"><span>Nowa opowieść</span><input type="text" id="newProjTitle" placeholder="Tytuł"></label>
+    <button class="btn primary" data-a="createProject">Utwórz</button>`);
+};
+A.createProject = async () => {
+  const t = ($('#newProjTitle')?.value || '').trim() || 'Nowa opowieść';
+  const p = newProject(t); S.project = p; S.sceneId = null; S.settings.lastProject = p.id; saveSettings();
+  await DB.set('p:' + p.id, p); S.projects.unshift({ id: p.id, title: p.title, updated: p.updated }); await DB.set('projects', S.projects);
+  closeSheet(); S.view = 'style'; render(); toast('Utworzono. Zacznij od stylu i postaci.');
+};
+A.openProject = async id => {
+  const p = await DB.get('p:' + id); if (!p) return toast('Nie znaleziono projektu.', true);
+  S.project = migrate(p); S.sceneId = null; S.settings.lastProject = id; saveSettings(); closeSheet(); S.view = 'write'; render();
+};
+A.delProject = async (id, b) => {
+  if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Na pewno?'; return; }
+  await DB.del('p:' + id); S.projects = S.projects.filter(x => x.id !== id); await DB.set('projects', S.projects);
+  if (S.project?.id === id) {
+    if (S.projects[0]) S.project = migrate(await DB.get('p:' + S.projects[0].id));
+    else { const p = newProject('Nowa opowieść'); S.project = p; await DB.set('p:' + p.id, p); S.projects = [{ id: p.id, title: p.title, updated: p.updated }]; await DB.set('projects', S.projects); }
+    S.sceneId = null;
+  }
+  A.openProjects(); render();
+};
+
+// --- rozdziały i sceny
+A.chapterMenu = () => {
+  const ch = curChapter();
+  openSheet('Rozdział', `<label class="field"><span>Tytuł</span><input type="text" id="chTitle" value="${esc(ch.title)}"></label>
+    <button class="btn" data-a="renameChapter">Zapisz tytuł</button>
+    <button class="btn primary" data-a="newChapter">Nowy rozdział</button>
+    <button class="btn danger" data-a="delChapter" ${S.project.chapters.length < 2 ? 'disabled' : ''}>Usuń ten rozdział</button>
+    <span class="hint">Usunięcie rozdziału kasuje jego sceny. Wydarzenia w pamięci zostają.</span>`);
+};
+A.renameChapter = () => { curChapter().title = $('#chTitle').value.trim() || curChapter().title; saveProject(); closeSheet(); render(); };
+A.newChapter = async () => {
+  const p = S.project, prev = curChapter();
+  const ch = { id: uid('c'), title: 'Rozdział ' + (p.chapters.length + 1), summary: '', scenes: [] };
+  p.chapters.push(ch); p.currentChapter = ch.id; saveProject(); closeSheet(); render();
+  if (prev.scenes.some(s => s.text) && !prev.summary) {
+    toast('Streszczam poprzedni rozdział do pamięci…');
+    try { await summarizeChapter(prev); toast('Poprzedni rozdział streszczony.'); } catch (e) { toastErr(e); }
+  }
+};
+A.delChapter = (id, b) => {
+  if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Na pewno usunąć?'; return; }
+  const p = S.project; p.chapters = p.chapters.filter(c => c.id !== p.currentChapter); p.currentChapter = p.chapters[0].id; saveProject(); closeSheet(); render();
+};
+A.newScene = () => {
+  const ch = curChapter(); const sc = newScene(ch.scenes.length + 1);
+  const prev = ch.scenes[ch.scenes.length - 1]; if (prev) sc.who = [...(prev.who || [])];
+  ch.scenes.push(sc); S.sceneId = sc.id; saveProject(); render(); setTimeout(() => $('#scenePlan')?.focus(), 50);
+};
+A.openScene = id => { S.sceneId = id; render(); scrollTo(0, 0); };
+A.backToScenes = () => { S.sceneId = null; render(); };
+A.delScene = (id, b) => {
+  if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Kliknij jeszcze raz, żeby usunąć'; return; }
+  const ch = chapterOf(S.sceneId); ch.scenes = ch.scenes.filter(s => s.id !== S.sceneId); S.sceneId = null; saveProject(); render();
+};
+A.toggleWho = id => {
+  const sc = curScene(); const w = new Set(sc.who || []); w.has(id) ? w.delete(id) : w.add(id); sc.who = [...w]; saveProject();
+  $$(`[data-a="toggleWho"][data-id="${id}"]`).forEach(b => b.setAttribute('aria-pressed', w.has(id)));
+};
+A.detectWho = () => {
+  const sc = curScene(); const found = S.project.characters.filter(c => mentions(sc.plan + ' ' + sc.text, c)).map(c => c.id);
+  sc.who = [...new Set([...(sc.who || []), ...found])]; saveProject(); render();
+  toast(found.length ? 'Wykryto: ' + whoNames(found).join(', ') : 'Nie znalazłem imion w planie.');
+};
+function pushHistory(sc) { if (sc.text.trim()) { sc.history = [...(sc.history || []), sc.text].slice(-6); } }
+A.undo = () => { const sc = curScene(); if (!sc.history?.length) return; sc.text = sc.history.pop(); saveProject(); render(); toast('Przywrócono poprzednią wersję.'); };
+
+// --- pisanie
+async function streamInto(sc, messages, { append } = {}) {
+  const base = append ? sc.text.replace(/\s+$/, '') + '\n\n' : '';
+  GEN = { ctrl: new AbortController() };
+  render();
+  const ta = $('#sceneText');
+  let follow = true;
+  const onScroll = () => { follow = innerHeight + scrollY >= document.documentElement.scrollHeight - 160; };
+  addEventListener('scroll', onScroll, { passive: true });
+  try {
+    const r = await llm('writer', messages, {
+      stream: true, signal: GEN.ctrl.signal, onDelta: full => {
+        sc.text = base + cleanOutput(full); if (ta) { ta.value = sc.text; autosize(ta); }
+        if (follow) scrollTo(0, document.documentElement.scrollHeight);
+      }
+    });
+    sc.text = base + cleanOutput(r.text);
+    sc.usage = r.usage;
+    return r;
+  } catch (e) {
+    if (e.name === 'AbortError') { toast('Zatrzymano.'); return null; }
+    throw e;
+  } finally {
+    removeEventListener('scroll', onScroll);
+    GEN = null; saveProject(); render();
+  }
+}
+A.generate = async () => {
+  if (GEN) return;
+  const p = S.project, sc = curScene();
+  if (!sc.who?.length) { const f = p.characters.filter(c => mentions(sc.plan, c)).map(c => c.id); if (f.length) sc.who = f; }
+  const ending = sc.ending === 'auto' ? pickEnding(p, sc) : sc.ending;
+  const messages = buildWriterMessages(p, sc, 'scene', { ending });
+  pushHistory(sc); sc.text = ''; sc.endingUsed = ending; sc.status = 'draft';
+  const r = await streamInto(sc, messages);
+  if (r) { sc.gen = { messages, output: sc.text, model: r.model, at: Date.now() }; saveProject(); }
+};
+A.continue = async () => {
+  if (GEN) return;
+  const sc = curScene(); const messages = buildWriterMessages(S.project, sc, 'continue');
+  pushHistory(sc);
+  const r = await streamInto(sc, messages, { append: true });
+  if (r && sc.gen) { sc.gen.output = sc.text; saveProject(); }
+};
+A.stop = () => GEN?.ctrl.abort();
+
+A.cutTail = () => {
+  const sc = curScene(); const { shortTail } = detectTics(sc.text, S.project); if (shortTail < 2) return;
+  pushHistory(sc); const ps = splitParas(sc.text); sc.text = joinParas(ps.slice(0, ps.length - shortTail)); saveProject(); render(); toast('Ucięto końcową puentę.');
+};
+
+A.preview = () => {
+  const sc = curScene(); const m = buildWriterMessages(S.project, sc, 'scene', { ending: sc.ending === 'auto' ? pickEnding(S.project, sc) : sc.ending });
+  const txt = m.map(x => '=== ' + x.role.toUpperCase() + ' ===\n' + x.content).join('\n\n');
+  openSheet('Co widzi model', `<span class="hint">To dokładnie trafi do pisarza. Około ${fmtN(estTok(txt))} tokenów, niezależnie od długości całej książki.</span><pre class="ctx">${esc(txt)}</pre>`);
+};
+
+A.ideas = async () => {
+  const sc = curScene();
+  openSheet('Pomysły na scenę', loader('Pisarz przegląda wątki i wydarzenia…'));
+  const r = await llm('writer', buildWriterMessages(S.project, sc, 'ideas'), { temp: Math.min(1.1, S.settings.roles.writer.temp + 0.2) }).catch(e => { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; });
+  const ideas = cleanOutput(r.text).split('\n').map(l => l.replace(/^[\s\-•*\d.)]+/, '').trim()).filter(l => l.includes('::')).map(l => { const [t, ...rest] = l.split('::'); return { t: t.trim(), p: rest.join('::').trim() }; });
+  S.ui = { ideas };
+  if (!ideas.length) return setSheet(`<div class="banner warn">Model nie zwrócił pomysłów w oczekiwanym formacie.</div><pre class="ctx">${esc(r.text)}</pre>`);
+  setSheet(ideas.map((x, i) => `<div class="variant"><h3>${esc(x.t)}</h3><p>${esc(x.p)}</p><button class="btn sm primary" data-a="useIdea" data-id="${i}">Użyj jako planu</button></div>`).join('') + `<span class="hint mono">${esc(usageLine(r.usage))}</span>`);
+};
+A.useIdea = i => {
+  const x = S.ui.ideas?.[i]; const sc = curScene(); if (!x || !sc) return;
+  sc.plan = x.p; if (/^Scena \d+$/.test(sc.title)) sc.title = x.t.replace(/[„”"]/g, '');
+  const f = S.project.characters.filter(c => mentions(x.p, c)).map(c => c.id); if (f.length) sc.who = [...new Set([...(sc.who || []), ...f])];
+  saveProject(); closeSheet(); render();
+};
+
+// --- inne zakończenia
+A.endings = async () => {
+  const p = S.project, sc = curScene();
+  const ps = splitParas(sc.text);
+  if (ps.length < 2) return toast('Scena jest za krótka, żeby wymienić zakończenie.', true);
+  const { shortTail } = detectTics(sc.text, p);
+  const cut = Math.min(ps.length - 1, shortTail >= 2 ? shortTail + 1 : (ps.length > 4 ? 2 : 1));
+  const base = joinParas(ps.slice(0, ps.length - cut)), oldEnd = joinParas(ps.slice(ps.length - cut));
+  const types = Object.keys(ENDINGS).filter(k => k !== sc.endingUsed).sort(() => Math.random() - .5).slice(0, 3);
+  S.ui = { base, oldEnd, types, variants: [null, null, null], neutral: buildWriterMessages(p, sc, 'ending', { base }) };
+  openSheet('Inne zakończenia', `<span class="hint">Wymieniam ostatnie ${cut === 1 ? 'akapit' : cut + ' akapity'}. Każdy wybór uczy przyszły model, czego nie lubisz.</span><div id="varList">${variantsHtml()}</div>`);
+  await Promise.allSettled(types.map(async (t, i) => {
+    try {
+      const r = await llm('writer', buildWriterMessages(p, sc, 'ending', { base, ending: t }), { maxTokens: 4000 });
+      S.ui.variants[i] = { text: cleanOutput(r.text) };
+    } catch (e) { S.ui.variants[i] = { err: e.message }; }
+    const vl = $('#varList'); if (vl) vl.innerHTML = variantsHtml();
+  }));
+};
+function variantsHtml() {
+  const u = S.ui;
+  const cards = u.types.map((t, i) => {
+    const v = u.variants[i];
+    if (!v) return `<div class="variant"><span class="label">${ENDINGS[t].label}</span><div class="skel"></div></div>`;
+    if (v.err) return `<div class="variant"><span class="label">${ENDINGS[t].label}</span><div class="banner bad small">${esc(v.err)}</div></div>`;
+    return `<div class="variant"><span class="label">${ENDINGS[t].label}</span><p>${esc(v.text)}</p><button class="btn sm primary" data-a="pickEnding" data-id="${i}">Wybierz to</button></div>`;
+  }).join('');
+  return cards + `<div class="variant"><span class="label">Obecne zakończenie</span><p>${esc(u.oldEnd)}</p><button class="btn sm" data-a="pickEnding" data-id="old">Zostaw obecne</button></div>`;
+}
+A.pickEnding = id => {
+  const u = S.ui, sc = curScene(), p = S.project;
+  const opts = u.types.map((t, i) => u.variants[i]?.text ? { t, text: u.variants[i].text } : null).filter(Boolean);
+  const chosen = id === 'old' ? u.oldEnd : u.variants[Number(id)]?.text; if (!chosen) return;
+  const rejected = [...opts.map(o => o.text), u.oldEnd].filter(x => x !== chosen);
+  for (const rj of rejected) p.dataset.dpo.push({ prompt: u.neutral, chosen, rejected: rj, at: Date.now() });
+  if (id !== 'old') { pushHistory(sc); sc.text = u.base + '\n\n' + chosen; sc.endingUsed = u.types[Number(id)]; }
+  saveProject(); closeSheet(); render(); toast(id === 'old' ? 'Zostawiono. Wybór zapisany do datasetu.' : 'Podmieniono zakończenie.');
+};
+
+// --- redakcja
+A.editorPass = async () => {
+  const sc = curScene(); const orig = sc.text;
+  openSheet('Redakcja', loader(S.settings.lt ? 'LanguageTool i redaktor czytają scenę…' : 'Redaktor czyta scenę…'));
+  let hints = '';
+  if (S.settings.lt) {
+    try {
+      const m = await languageTool(orig);
+      hints = m.slice(0, 60).map(x => `- „${x.ctx}”: ${x.msg}${x.rep.length ? ' → ' + x.rep.join(' / ') : ''}`).join('\n');
+    } catch { /* LT niedostępny: idziemy dalej bez niego */ }
+  }
+  const user = (hints ? `Automatyczny korektor (LanguageTool) zgłosił możliwe problemy. Część zgłoszeń może być fałszywa, oceń je sam:\n${hints}\n\n` : '') + 'TEKST DO KOREKTY:\n\n' + orig;
+  let r;
+  try { r = await llm('editor', [{ role: 'system', content: EDITOR_SYS }, { role: 'user', content: user }]); }
+  catch (e) { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; }
+  const fixed = cleanOutput(r.text);
+  const ratio = fixed.length / Math.max(1, orig.length);
+  const segs = diffHunks(orig, fixed);
+  const n = segs.filter(s => s.eq == null).length;
+  S.ui = { segs, orig };
+  if (!n) return setSheet(`<div class="banner info">Redaktor nie znalazł nic do poprawy.</div><span class="hint mono">${esc(usageLine(r.usage))}</span>`);
+  setSheet(`${ratio < 0.8 || ratio > 1.25 ? '<div class="banner warn"><b>Uwaga:</b> redaktor mocno zmienił długość tekstu. Przejrzyj zmiany dokładnie.</div>' : ''}
+    <div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
+    <div class="diff" id="diffBox">${diffHtml()}</div>
+    <span class="hint mono">${esc(usageLine(r.usage))}${hints ? ' · LanguageTool: ' + hints.split('\n').length + ' uwag' : ''}</span>
+    <div class="sheet-foot"><button class="btn" data-a="closeSheet">Anuluj</button><button class="btn primary" data-a="applyHunks">Zastosuj zaznaczone</button></div>`);
+};
+function diffHtml() { return S.ui.segs.map((s, i) => s.eq != null ? esc(s.eq) : `<button class="hunk ${s.on ? '' : 'off'}" data-a="toggleHunk" data-id="${i}" aria-pressed="${s.on}">${s.del ? `<del>${esc(s.del)}</del>` : ''}${s.ins ? `<ins>${esc(s.ins)}</ins>` : ''}</button>`).join(''); }
+A.toggleHunk = i => { const s = S.ui.segs[i]; s.on = !s.on; const b = $(`[data-a="toggleHunk"][data-id="${i}"]`); b.classList.toggle('off', !s.on); b.setAttribute('aria-pressed', s.on); };
+A.hunksAll = v => { S.ui.segs.forEach(s => { if (s.eq == null) s.on = v === '1'; }); $('#diffBox').innerHTML = diffHtml(); };
+A.applyHunks = () => { const sc = curScene(); pushHistory(sc); sc.text = applyHunks(S.ui.segs); saveProject(); closeSheet(); render(); toast('Poprawki zastosowane.'); };
+
+// --- zatwierdzenie i pamięć
+A.accept = async () => {
+  const sc = curScene();
+  openSheet('Aktualizacja pamięci', loader('Archiwista czyta scenę i porównuje ją z kanonem…'));
+  let r;
+  try { r = await llm('memory', buildExtractMessages(S.project, sc), { json: true }); }
+  catch (e) { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; }
+  const d = parseJSON(r.text);
+  if (!d) return setSheet(`<div class="banner bad">Archiwista zwrócił coś, czego nie umiem odczytać. Spróbuj ponownie albo zmień model archiwisty.</div><pre class="ctx">${esc(r.text.slice(0, 3000))}</pre>`);
+  S.ui = { x: normalizeExtract(d), sceneId: sc.id, usage: r.usage };
+  setSheet(reviewHtml());
+};
+function normalizeExtract(d) {
+  const arr = v => Array.isArray(v) ? v : [];
+  return {
+    summary: String(d.summary || ''),
+    events: arr(d.events).filter(e => e && e.text),
+    knowledge: arr(d.knowledge).filter(k => k && k.character && k.learned),
+    character_updates: arr(d.character_updates).filter(k => k && k.character && k.change),
+    new_characters: arr(d.new_characters).filter(c => c && c.name && !findChar(c.name)),
+    threads_opened: arr(d.threads_opened).filter(t => t && t.text),
+    threads_closed: arr(d.threads_closed).filter(t => t && S.project.threads.some(x => x.id === t.id && x.status === 'open')),
+    continuity: arr(d.continuity).map(String).filter(s => s.trim()),
+  };
+}
+function reviewHtml() {
+  const x = S.ui.x;
+  const box = (key, i, html) => `<label class="xitem"><input type="checkbox" data-x="${key}:${i}" checked><span class="x">${html}</span></label>`;
+  const sec = (title, key, arr, fn) => arr.length ? `<div class="card"><div class="label">${title}</div>${arr.map((v, i) => box(key, i, fn(v))).join('')}</div>` : '';
+  const thText = id => S.project.threads.find(t => t.id === id)?.text || id;
+  return `${x.continuity.length ? `<div class="banner warn"><b>Możliwe błędy ciągłości</b>${x.continuity.map(c => '<div class="small">• ' + esc(c) + '</div>').join('')}<span class="small">Popraw scenę albo zatwierdź, jeśli to zamierzone.</span></div>` : ''}
+  <div class="card"><div class="label">Streszczenie sceny</div><textarea class="auto" id="xSummary">${esc(x.summary)}</textarea></div>
+  ${sec('Nowe wydarzenia', 'events', x.events, e => `${esc(e.text)}${e.consequence ? `<br><span class="muted small">→ ${esc(e.consequence)}</span>` : ''}${e.who?.length ? `<br><span class="small muted">${esc(e.who.join(', '))}</span>` : ''}${e.important ? ' <span class="tag warn">ważne</span>' : ''}`)}
+  ${sec('Czego dowiedziały się postacie', 'knowledge', x.knowledge, k => `<b>${esc(k.character)}</b>: ${esc(k.learned)}`)}
+  ${sec('Zmiany postaci', 'character_updates', x.character_updates, k => `<b>${esc(k.character)}</b>: ${esc(k.change)}`)}
+  ${sec('Nowe postacie', 'new_characters', x.new_characters, c => `<b>${esc(c.name)}</b>: ${esc(c.description || '')}`)}
+  ${sec('Nowe wątki', 'threads_opened', x.threads_opened, t => esc(t.text))}
+  ${sec('Zamknięte wątki', 'threads_closed', x.threads_closed, t => `${esc(thText(t.id))}<br><span class="muted small">Rozwiązanie: ${esc(t.resolution || '')}</span>`)}
+  <span class="hint mono">${esc(usageLine(S.ui.usage))}</span>
+  <div class="sheet-foot"><button class="btn" data-a="closeSheet">Anuluj</button><button class="btn primary" data-a="applyExtract">Zapisz w pamięci</button></div>`;
+}
+function applyExtraction(sc, x, picked) {
+  const p = S.project, ch = chapterOf(sc.id);
+  const ok = (k, i) => !picked || picked.has(k + ':' + i);
+  const ids = names => (names || []).map(n => findChar(n)?.id).filter(Boolean);
+  x.new_characters.forEach((c, i) => { if (ok('new_characters', i)) p.characters.push({ id: uid('ch'), name: c.name.trim(), aliases: '', role: '', description: c.description || '', motivation: '', voice: '', relations: '', knows: [], unknown: '', changes: [] }); });
+  // zastąp stare wpisy tej sceny, jeśli aktualizujemy ponownie
+  p.events = p.events.filter(e => e.sceneId !== sc.id);
+  x.events.forEach((e, i) => { if (ok('events', i)) p.events.push({ id: uid('e'), chapterId: ch.id, sceneId: sc.id, text: e.text, who: ids(e.who), consequence: e.consequence || '', important: !!e.important }); });
+  const ci = chapterIndex(ch.id) + 1;
+  x.knowledge.forEach((k, i) => { const c = findChar(k.character); if (c && ok('knowledge', i)) { c.knows = c.knows || []; const line = `${k.learned} (R${ci})`; if (!c.knows.includes(line)) c.knows.push(line); } });
+  x.character_updates.forEach((k, i) => { const c = findChar(k.character); if (c && ok('character_updates', i)) { c.changes = c.changes || []; c.changes.push(`${k.change} (R${ci})`); } });
+  x.threads_opened.forEach((t, i) => { if (ok('threads_opened', i)) p.threads.push({ id: uid('t'), text: t.text, who: ids(t.who), status: 'open', openedIn: ch.id }); });
+  x.threads_closed.forEach((t, i) => { const th = p.threads.find(z => z.id === t.id); if (th && ok('threads_closed', i)) { th.status = 'closed'; th.resolution = t.resolution || ''; th.closedIn = ch.id; } });
+  sc.summary = x.summary;
+  sc.status = 'accepted';
+  sc.tickEnding = S.project.tics.detect && detectTics(sc.text, p).tics.some(t => t.id !== 'zakazane');
+  if (sc.gen && sc.gen.output !== sc.text) {
+    p.dataset.sft = p.dataset.sft.filter(z => z.sceneId !== sc.id);
+    p.dataset.sft.push({ sceneId: sc.id, messages: sc.gen.messages, output: sc.gen.output, final: sc.text, model: sc.gen.model, at: Date.now() });
+  } else if (sc.gen) {
+    p.dataset.sft = p.dataset.sft.filter(z => z.sceneId !== sc.id);
+    p.dataset.sft.push({ sceneId: sc.id, messages: sc.gen.messages, output: sc.gen.output, final: sc.text, model: sc.gen.model, at: Date.now(), unchanged: true });
+  }
+}
+A.applyExtract = () => {
+  const sc = curScene() || S.project.chapters.flatMap(c => c.scenes).find(s => s.id === S.ui.sceneId);
+  const picked = new Set($$('[data-x]').filter(i => i.checked).map(i => i.dataset.x));
+  S.ui.x.summary = $('#xSummary')?.value || S.ui.x.summary;
+  applyExtraction(sc, S.ui.x, picked);
+  saveProject(); closeSheet(); render(); toast('Zapisano w pamięci.');
+};
+
+async function summarizeChapter(ch) {
+  const body = ch.scenes.map(s => `${s.title}: ${s.summary || s.text.slice(0, 3000)}`).join('\n\n');
+  if (!body.trim()) throw new UserError('Ten rozdział nie ma jeszcze treści.');
+  const r = await llm('memory', [{ role: 'system', content: MEMORY_SYS.replace('Zwracasz WYŁĄCZNIE poprawny JSON.', '') }, { role: 'user', content: `Streść rozdział „${ch.title}” w 4–6 zdaniach: najważniejsze zdarzenia, zmiany w relacjach i to, z czym rozdział się kończy. Same fakty, bez ocen. Zwróć tylko streszczenie.\n\n${body}` }]);
+  ch.summary = cleanOutput(r.text); saveProject(); render();
+}
+A.summarize = async (id, b) => { const ch = S.project.chapters.find(c => c.id === id); b.disabled = true; b.innerHTML = '<span class="spinner"></span>'; try { await summarizeChapter(ch); toast('Streszczono.'); } finally { render(); } };
+
+// --- import istniejącego tekstu
+A.importText = () => {
+  openSheet('Wklej gotowy tekst', `<span class="hint">Wklej rozdział, który już masz. Sceny rozdziel linią z „***”. Archiwista przeczyta każdą scenę i zbuduje pamięć: postacie, wydarzenia, wątki.</span>
+    <label class="field"><span>Tytuł rozdziału</span><input type="text" id="impTitle" value="Rozdział ${S.project.chapters.length + (curChapter().scenes.length ? 1 : 0)}"></label>
+    <label class="field"><span>Tekst</span><textarea id="impText" style="min-height:40vh"></textarea></label>
+    <label class="toggle"><span>Dodaj jako nowy rozdział</span><input type="checkbox" id="impNew" ${curChapter().scenes.length ? 'checked' : ''}></label>
+    <div class="sheet-foot"><button class="btn primary" data-a="runImport">Importuj i zbuduj pamięć</button></div>`);
+};
+A.runImport = async () => {
+  const p = S.project, txt = $('#impText').value.trim(); if (!txt) return toast('Wklej tekst.', true);
+  let ch = curChapter();
+  if ($('#impNew').checked) { ch = { id: uid('c'), title: $('#impTitle').value.trim() || 'Rozdział', summary: '', scenes: [] }; p.chapters.push(ch); }
+  else if ($('#impTitle').value.trim()) ch.title = $('#impTitle').value.trim();
+  p.currentChapter = ch.id;
+  const parts = txt.split(/\n\s*(?:\*\s*){3}\s*\n|\n\s*#{1,3}\s*\n/).map(s => s.trim()).filter(Boolean);
+  const scenes = parts.map((t, i) => { const s = newScene(ch.scenes.length + i + 1); s.text = t; s.status = 'draft'; return s; });
+  ch.scenes.push(...scenes); saveProject();
+  let done = 0, fails = 0;
+  for (const s of scenes) {
+    setSheet(loader(`Archiwista czyta scenę ${done + 1} z ${scenes.length}…`));
+    try {
+      s.who = p.characters.filter(c => mentions(s.text, c)).map(c => c.id);
+      const r = await llm('memory', buildExtractMessages(p, s), { json: true });
+      const d = parseJSON(r.text); if (!d) throw new Error('zły JSON');
+      applyExtraction(s, normalizeExtract(d), null);
+      s.who = p.characters.filter(c => mentions(s.text, c)).map(c => c.id);
+    } catch (e) { fails++; console.warn(e); }
+    done++; saveProject();
+  }
+  closeSheet(); render();
+  toast(`Zaimportowano ${scenes.length} scen${fails ? `, ${fails} bez pamięci (spróbuj „Zaktualizuj pamięć” w scenie)` : ''}.`, !!fails);
+};
+
+// --- postacie, wydarzenia, wątki
+A.editChar = id => {
+  const c = id ? charById(id) : { id: '', name: '', aliases: '', role: '', description: '', motivation: '', voice: '', relations: '', knows: [], unknown: '', changes: [] };
+  const f = (k, label, ph, area) => `<label class="field"><span>${label}</span>${area ? `<textarea class="auto" id="c_${k}" placeholder="${esc(ph)}">${esc(Array.isArray(c[k]) ? c[k].join('\n') : c[k])}</textarea>` : `<input type="text" id="c_${k}" value="${esc(c[k])}" placeholder="${esc(ph)}">`}</label>`;
+  openSheet(id ? c.name : 'Nowa postać', `${f('name', 'Imię', 'Hanna')}${f('aliases', 'Inne nazwy (po przecinku)', 'Hania, Kowalska')}${f('role', 'Rola', 'protagonistka')}
+    ${f('description', 'Kim jest', 'Wiek, wygląd, charakter, sytuacja', 1)}${f('motivation', 'Motywacja', 'Czego chce i czego się boi', 1)}
+    ${f('voice', 'Sposób mówienia', 'Krótko, ironicznie, unika pytań wprost', 1)}${f('relations', 'Relacje', 'Z kim i jak', 1)}
+    ${f('knows', 'Wie (jedna rzecz w linii)', 'Uzupełnia się po scenach', 1)}${f('unknown', 'Nie wie', 'Sekrety, których ta postać nie zna', 1)}
+    ${f('changes', 'Zmiany w toku opowieści (jedna w linii)', '', 1)}
+    <div class="sheet-foot">${id ? `<button class="btn danger" data-a="delChar" data-id="${id}">Usuń</button>` : ''}<button class="btn primary" data-a="saveChar" data-id="${id || ''}">Zapisz</button></div>`);
+};
+A.saveChar = id => {
+  const g = k => $('#c_' + k).value.trim();
+  const name = g('name'); if (!name) return toast('Podaj imię.', true);
+  let c = id ? charById(id) : null;
+  if (!c) { c = { id: uid('ch') }; S.project.characters.push(c); }
+  Object.assign(c, { name, aliases: g('aliases'), role: g('role'), description: g('description'), motivation: g('motivation'), voice: g('voice'), relations: g('relations'), knows: lines(g('knows')), unknown: g('unknown'), changes: lines(g('changes')) });
+  saveProject(); closeSheet(); render();
+};
+A.delChar = (id, b) => {
+  if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Na pewno?'; return; }
+  const p = S.project; p.characters = p.characters.filter(c => c.id !== id);
+  p.events.forEach(e => e.who = (e.who || []).filter(x => x !== id));
+  p.chapters.forEach(ch => ch.scenes.forEach(s => s.who = (s.who || []).filter(x => x !== id)));
+  saveProject(); closeSheet(); render();
+};
+const whoPicker = sel => `<div class="chips" id="whoPick">${S.project.characters.map(c => `<button class="chip" data-a="pickWho" data-id="${c.id}" aria-pressed="${sel.includes(c.id)}">${esc(c.name)}</button>`).join('') || '<span class="hint">Brak postaci</span>'}</div>`;
+A.pickWho = (id, b) => b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true');
+const pickedWho = () => $$('#whoPick [aria-pressed="true"]').map(b => b.dataset.id);
+A.editEvent = id => {
+  const p = S.project, e = id ? p.events.find(x => x.id === id) : { text: '', consequence: '', who: [], important: false, chapterId: curChapter().id };
+  openSheet(id ? 'Wydarzenie' : 'Nowe wydarzenie', `<label class="field"><span>Co się stało</span><textarea class="auto" id="e_text">${esc(e.text)}</textarea></label>
+    <label class="field"><span>Skutek</span><textarea class="auto" id="e_cons">${esc(e.consequence)}</textarea></label>
+    <div class="field"><span>Kogo dotyczy</span>${whoPicker(e.who || [])}</div>
+    <label class="field"><span>Rozdział</span><select id="e_ch">${p.chapters.map((c, i) => `<option value="${c.id}" ${c.id === e.chapterId ? 'selected' : ''}>R${i + 1} · ${esc(c.title)}</option>`).join('')}</select></label>
+    <label class="toggle"><span>Ważne dla dalszej fabuły</span><input type="checkbox" id="e_imp" ${e.important ? 'checked' : ''}></label>
+    <div class="sheet-foot">${id ? `<button class="btn danger" data-a="delEvent" data-id="${id}">Usuń</button>` : ''}<button class="btn primary" data-a="saveEvent" data-id="${id || ''}">Zapisz</button></div>`);
+};
+A.saveEvent = id => {
+  const p = S.project, text = $('#e_text').value.trim(); if (!text) return toast('Opisz wydarzenie.', true);
+  let e = id ? p.events.find(x => x.id === id) : null;
+  if (!e) { e = { id: uid('e'), sceneId: null }; p.events.push(e); }
+  Object.assign(e, { text, consequence: $('#e_cons').value.trim(), who: pickedWho(), chapterId: $('#e_ch').value, important: $('#e_imp').checked });
+  saveProject(); closeSheet(); render();
+};
+A.delEvent = id => { S.project.events = S.project.events.filter(e => e.id !== id); saveProject(); closeSheet(); render(); };
+A.editThread = id => {
+  const t = id ? S.project.threads.find(x => x.id === id) : { text: '', who: [], status: 'open', resolution: '' };
+  openSheet(id ? 'Wątek' : 'Nowy wątek', `<label class="field"><span>Wątek, zagadka albo obietnica</span><textarea class="auto" id="t_text">${esc(t.text)}</textarea></label>
+    <div class="field"><span>Kogo dotyczy</span>${whoPicker(t.who || [])}</div>
+    <label class="toggle"><span>Zamknięty</span><input type="checkbox" id="t_closed" ${t.status !== 'open' ? 'checked' : ''}></label>
+    <label class="field"><span>Rozwiązanie</span><textarea class="auto" id="t_res">${esc(t.resolution || '')}</textarea></label>
+    <div class="sheet-foot">${id ? `<button class="btn danger" data-a="delThread" data-id="${id}">Usuń</button>` : ''}<button class="btn primary" data-a="saveThread" data-id="${id || ''}">Zapisz</button></div>`);
+};
+A.saveThread = id => {
+  const p = S.project, text = $('#t_text').value.trim(); if (!text) return toast('Opisz wątek.', true);
+  let t = id ? p.threads.find(x => x.id === id) : null;
+  if (!t) { t = { id: uid('t'), openedIn: curChapter().id }; p.threads.push(t); }
+  Object.assign(t, { text, who: pickedWho(), status: $('#t_closed').checked ? 'closed' : 'open', resolution: $('#t_res').value.trim() });
+  saveProject(); closeSheet(); render();
+};
+A.delThread = id => { S.project.threads = S.project.threads.filter(t => t.id !== id); saveProject(); closeSheet(); render(); };
+
+// --- ustawienia
+A.testConn = async (id, b) => {
+  b.disabled = true; b.innerHTML = '<span class="spinner"></span> Sprawdzam…';
+  try {
+    const r = await llm('writer', [{ role: 'user', content: 'Odpowiedz jednym zdaniem po polsku: jaki jest najlepszy sposób, żeby zacząć opowiadanie?' }], { maxTokens: 3000 });
+    toast('Działa: ' + cleanOutput(r.text).slice(0, 140));
+  } finally { b.disabled = false; b.textContent = 'Sprawdź połączenie (Pisarz)'; }
+};
+async function loadModels() {
+  if (S.models) return S.models;
+  const cached = await DB.get('models');
+  if (cached && Date.now() - cached.at < 864e5) return (S.models = cached.list);
+  const r = await fetch('https://openrouter.ai/api/v1/models');
+  if (!r.ok) throw new UserError('Nie udało się pobrać listy modeli z OpenRouter.');
+  const j = await r.json();
+  const list = (j.data || []).filter(m => (m.architecture?.output_modalities || ['text']).includes('text')).map(m => ({
+    id: m.id, name: m.name, ctx: m.context_length,
+    pin: Number(m.pricing?.prompt || 0) * 1e6, pout: Number(m.pricing?.completion || 0) * 1e6,
+  }));
+  await DB.set('models', { at: Date.now(), list });
+  return (S.models = list);
+}
+A.pickModel = async role => {
+  S.ui = { role };
+  openSheet('Model: ' + ROLE_INFO[role].name, `<input type="search" id="modelSearch" placeholder="Szukaj: kimi, gemini, claude, qwen…" autocapitalize="off" autocorrect="off"><div id="modelList">${loader('Pobieram listę modeli…')}</div>`);
+  try { await loadModels(); renderModelList(''); } catch (e) { $('#modelList').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`; }
+};
+function renderModelList(q) {
+  const el = $('#modelList'); if (!el || !S.models) return;
+  const t = q.toLowerCase().trim();
+  const sugg = ['moonshotai/kimi-k3', 'moonshotai/kimi-k3.1-pro', 'google/gemini-3.8-flash', 'google/gemini-4-argon', 'qwen', 'deepseek', 'anthropic'];
+  let list = S.models.filter(m => !t || m.id.toLowerCase().includes(t) || (m.name || '').toLowerCase().includes(t));
+  if (!t) list = list.sort((a, b) => (sugg.findIndex(s => a.id.startsWith(s)) + 1 || 99) - (sugg.findIndex(s => b.id.startsWith(s)) + 1 || 99));
+  el.innerHTML = list.slice(0, 80).map(m => `<button class="model-row" data-a="setModel" data-id="${esc(m.id)}"><span>${esc(m.name || m.id)}</span><span class="mono">${esc(m.id)} · $${m.pin.toFixed(2)} / $${m.pout.toFixed(2)} za 1M · ${fmtN(m.ctx)} kontekstu</span></button>`).join('') || '<div class="empty">Nic nie znaleziono.</div>';
+}
+A.setModel = id => { S.settings.roles[S.ui.role].model = id; saveSettings(); closeSheet(); render(); toast('Ustawiono ' + id); };
+
+async function saveFile(name, content, type) {
+  const blob = content instanceof Blob ? content : new Blob([content], { type });
+  try {
+    const file = new File([blob], name, { type });
+    if (navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) { await navigator.share({ files: [file], title: name }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+}
+const slug = s => (s || 'opowiesc').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+A.exportSFT = () => {
+  const p = S.project;
+  const rows = p.dataset.sft.map(z => JSON.stringify({ messages: [...z.messages, { role: 'assistant', content: z.final }] }));
+  saveFile(`atrament-${slug(p.title)}-sft.jsonl`, rows.join('\n') + '\n', 'application/jsonl');
+};
+A.exportDPO = () => {
+  const p = S.project;
+  const rows = p.dataset.dpo.map(z => JSON.stringify({ prompt: z.prompt, chosen: [{ role: 'assistant', content: z.chosen }], rejected: [{ role: 'assistant', content: z.rejected }] }));
+  saveFile(`atrament-${slug(p.title)}-dpo.jsonl`, rows.join('\n') + '\n', 'application/jsonl');
+};
+A.exportBackup = async () => {
+  const projects = []; for (const m of S.projects) { const p = await DB.get('p:' + m.id); if (p) projects.push(p); }
+  const { orKey, customKey, ...settings } = S.settings;
+  saveFile(`atrament-kopia-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'atrament', v: 1, at: Date.now(), settings, projects }), 'application/json');
+};
+A.importBackup = () => $('#fileIn').click();
+$('#fileIn').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const j = JSON.parse(await f.text());
+    if (j.app !== 'atrament' || !Array.isArray(j.projects)) throw new UserError('To nie jest kopia Atramentu.');
+    for (const p of j.projects) {
+      await DB.set('p:' + p.id, p);
+      const i = S.projects.findIndex(x => x.id === p.id); const meta = { id: p.id, title: p.title, updated: p.updated };
+      if (i >= 0) S.projects[i] = meta; else S.projects.push(meta);
+    }
+    await DB.set('projects', S.projects);
+    if (j.settings) { const { orKey, customKey } = S.settings; S.settings = { ...DEFAULT_SETTINGS, ...j.settings, roles: { ...DEFAULT_SETTINGS.roles, ...(j.settings.roles || {}) }, orKey, customKey }; saveSettings(); }
+    if (j.projects[0]) S.project = migrate(await DB.get('p:' + (S.project && j.projects.some(p => p.id === S.project.id) ? S.project.id : j.projects[0].id)));
+    S.sceneId = null; render(); toast(`Wczytano ${j.projects.length} opowieści.`);
+  } catch (err) { toastErr(err instanceof SyntaxError ? new UserError('Plik jest uszkodzony.') : err); }
+});
+
+/* ============================== Książka ============================== */
+const ORD1 = ['', 'pierwszy', 'drugi', 'trzeci', 'czwarty', 'piąty', 'szósty', 'siódmy', 'ósmy', 'dziewiąty', 'dziesiąty', 'jedenasty', 'dwunasty', 'trzynasty', 'czternasty', 'piętnasty', 'szesnasty', 'siedemnasty', 'osiemnasty', 'dziewiętnasty'];
+const ORD10 = ['', '', 'dwudziesty', 'trzydziesty', 'czterdziesty', 'pięćdziesiąty', 'sześćdziesiąty', 'siedemdziesiąty', 'osiemdziesiąty', 'dziewięćdziesiąty'];
+function ordinalPl(n) { if (n < 20) return ORD1[n]; if (n < 100) return ORD10[Math.floor(n / 10)] + (n % 10 ? ' ' + ORD1[n % 10] : ''); return String(n); }
+function roman(n) { const m = [[1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I']]; let s = ''; for (const [v, r] of m) while (n >= v) { s += r; n -= v; } return s; }
+const NUMBERING = { words: 'Rozdział pierwszy', arabic: 'Rozdział 1', roman: 'Rozdział I', bare: '1', none: 'Bez numeracji' };
+function chapterLabel(n, mode) {
+  if (mode === 'words') return 'Rozdział ' + ordinalPl(n);
+  if (mode === 'arabic') return 'Rozdział ' + n;
+  if (mode === 'roman') return 'Rozdział ' + roman(n);
+  if (mode === 'bare') return String(n);
+  return '';
+}
+// "Rozdział 3. Skrzynka" -> "Skrzynka"; "Rozdział 3" -> ""
+const chapterSubtitle = t => (t || '').replace(/^\s*rozdział\s+(\d+|[ivxlcdm]+)(?![\p{L}])\.?\s*/iu, '').trim();
+
+function typoPl(t, on) {
+  if (!on) return t;
+  let s = t
+    .replace(/\.\.\./g, '…')
+    .replace(/(^|\n)[ \t]*(-{1,2}|—)[ \t]+/g, '$1– ')
+    .replace(/ (-{1,2}|—) /g, ' – ')
+    .replace(/"([^"\n]+)"/g, '„$1”')
+    .replace(/„([^„”\n]*)"/g, '„$1”');
+  // sierotki: jednoliterowe wyrazy nie zostają na końcu wiersza
+  for (let i = 0; i < 2; i++) s = s.replace(/(^|[\s(„])([aiouwzAIOUWZ]) /g, '$1$2\u00a0');
+  return s;
+}
+
+function bookScenes(p, ch) {
+  return ch.scenes.filter(s => s.text.trim() && !s.exclude && (!p.book.onlyAccepted || s.status === 'accepted'));
+}
+function bookStructure(p) {
+  const out = []; let n = 0;
+  p.chapters.forEach(ch => {
+    const scenes = bookScenes(p, ch);
+    if (ch.part?.trim()) out.push({ type: 'part', title: ch.part.trim() });
+    if (!scenes.length) return;
+    n++;
+    const sub = chapterSubtitle(ch.title);
+    const label = chapterLabel(n, p.book.numbering);
+    out.push({ type: 'chapter', id: ch.id, n, label: label || sub || ch.title, title: label ? sub : '', scenes: scenes.map(s => splitParas(typoPl(s.text, p.book.typo))) });
+  });
+  return out;
+}
+function bookStats(p) {
+  let words = 0, chars = 0;
+  p.chapters.forEach(ch => bookScenes(p, ch).forEach(s => { words += wc(s.text); chars += s.text.replace(/\n+/g, ' ').length; }));
+  return { words, chars, norm: chars / 1800, ark: chars / 40000, print: Math.ceil(chars / 2100) };
+}
+
+function bookHtml(p) {
+  const b = p.book, st = bookStructure(p);
+  let h = `<section class="front"><h1>${esc(p.title)}</h1>${b.subtitle ? `<div class="sub">${esc(b.subtitle)}</div>` : ''}${b.author ? `<div class="auth">${esc(b.author)}</div>` : ''}</section>`;
+  if (b.dedication.trim()) h += `<div class="dedic">${esc(b.dedication).replace(/\n/g, '<br>')}</div>`;
+  if (b.motto.trim()) h += `<div class="motto">${esc(b.motto).replace(/\n/g, '<br>')}${b.mottoSource ? `<br>— ${esc(b.mottoSource)}` : ''}</div>`;
+  for (const x of st) {
+    if (x.type === 'part') { h += `<div class="part">${esc(x.title)}</div>`; continue; }
+    h += `<h2 id="bk_${x.id}">${esc(x.label)}</h2>${x.title ? `<div class="chap-sub">${esc(x.title)}</div>` : ''}`;
+    x.scenes.forEach((paras, i) => {
+      if (i) h += `<div class="sep">${esc(b.sep)}</div>`;
+      h += paras.map(t => `<p>${esc(t)}</p>`).join('');
+    });
+  }
+  if (!st.some(x => x.type === 'chapter')) h += `<p class="noind muted">Książka jest jeszcze pusta. Napisz pierwszą scenę.</p>`;
+  return h;
+}
+
+function viewBook() {
+  const p = S.project, b = p.book;
+  if (S.bookMode === 'read') {
+    const st = bookStructure(p).filter(x => x.type === 'chapter');
+    return `<div class="row toc-jump"><button class="btn" data-a="bookMode" data-id="plan">← Plan książki</button>
+      <select class="grow" id="tocJump" aria-label="Spis treści"><option value="">Spis treści</option>${st.map(x => `<option value="${x.id}">${esc(x.label)}${x.title ? ' · ' + esc(x.title) : ''}</option>`).join('')}</select></div>
+      <article class="book" lang="pl">${bookHtml(p)}</article>`;
+  }
+  const s = bookStats(p);
+  const pct = Math.min(100, Math.round(s.words / Math.max(1, b.target) * 100));
+  let n = 0;
+  const chs = p.chapters.map((ch, ci) => {
+    const inBook = bookScenes(p, ch).length; if (inBook) n++;
+    const label = inBook ? chapterLabel(n, b.numbering) : 'Poza książką (brak tekstu)';
+    const sub = chapterSubtitle(ch.title);
+    const rows = ch.scenes.map((sc, si) => {
+      const off = sc.exclude || !sc.text.trim() || (b.onlyAccepted && sc.status !== 'accepted');
+      const first = ci === 0 && si === 0, last = ci === p.chapters.length - 1 && si === ch.scenes.length - 1;
+      return `<div class="sc-row ${off ? 'off' : ''}">
+        <input type="checkbox" aria-label="Scena w książce" ${sc.exclude ? '' : 'checked'} data-a="toggleInBook" data-id="${sc.id}">
+        <button class="nm" data-a="gotoScene" data-id="${sc.id}"><span>${esc(sc.title)}</span><span class="small muted">${fmtN(wc(sc.text))} sł. · ${sc.status === 'accepted' ? 'w pamięci' : 'szkic'}</span></button>
+        <div class="mv"><button data-a="mvScene" data-id="${sc.id}:-1" aria-label="W górę" ${first ? 'disabled' : ''}>↑</button><button data-a="mvScene" data-id="${sc.id}:1" aria-label="W dół" ${last ? 'disabled' : ''}>↓</button></div></div>`;
+    }).join('');
+    return `${ch.part ? `<div class="part-label">${esc(ch.part)}</div>` : ''}<div class="card chap-card">
+      <div class="ch-top"><div class="body"><span class="ch-num">${esc(label)}</span><span class="ch-title">${esc(sub || ch.title)}</span>
+        <span class="small muted">${ch.scenes.length} scen · ${fmtN(ch.scenes.reduce((a, x) => a + wc(x.text), 0))} słów</span></div>
+        <div class="mv"><button data-a="editChapterBook" data-id="${ch.id}" aria-label="Edytuj rozdział">✎</button><button data-a="mvChapter" data-id="${ch.id}:-1" aria-label="Rozdział w górę" ${ci === 0 ? 'disabled' : ''}>↑</button><button data-a="mvChapter" data-id="${ch.id}:1" aria-label="Rozdział w dół" ${ci === p.chapters.length - 1 ? 'disabled' : ''}>↓</button></div></div>
+      ${rows || '<div class="sc-row"><span class="small muted">Brak scen</span></div>'}</div>`;
+  }).join('');
+  return `<h2 class="sec">Książka</h2>
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><b>${fmtN(s.words)}</b><span>słów z ${fmtN(b.target)} (${pct}%)</span></div>
+      <div class="stat"><b>${fmtN(Math.round(s.norm))}</b><span>stron maszynopisu (1800 zn.)</span></div>
+      <div class="stat"><b>${s.ark.toFixed(1).replace('.', ',')}</b><span>arkusza wydawniczego</span></div>
+      <div class="stat"><b>~${fmtN(s.print)}</b><span>stron w druku (A5)</span></div>
+    </div>
+    <div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+    <div class="row"><button class="btn primary grow" data-a="bookMode" data-id="read">Czytaj jak książkę</button><button class="btn grow" data-a="bookExport">Eksportuj</button></div>
+  </div>
+  <div class="label">Spis treści</div>
+  ${chs}
+  <button class="btn" data-a="newChapterBook">Dodaj rozdział</button>
+  <div class="card">
+    <div class="label">Strona tytułowa</div>
+    <label class="field"><span>Tytuł</span><input type="text" id="bkTitle" data-f="project.title" value="${esc(p.title)}"></label>
+    <label class="field"><span>Podtytuł</span><input type="text" id="bkSub" data-f="book.subtitle" value="${esc(b.subtitle)}"></label>
+    <label class="field"><span>Autor</span><input type="text" id="bkAuth" data-f="book.author" value="${esc(b.author)}"></label>
+    <label class="field"><span>Dedykacja</span><textarea class="auto" id="bkDed" data-f="book.dedication" placeholder="Dla…">${esc(b.dedication)}</textarea></label>
+    <label class="field"><span>Motto</span><textarea class="auto" id="bkMotto" data-f="book.motto">${esc(b.motto)}</textarea></label>
+    <label class="field"><span>Źródło motta</span><input type="text" id="bkMottoSrc" data-f="book.mottoSource" value="${esc(b.mottoSource)}"></label>
+    <label class="field"><span>Opis na okładkę (blurb)</span><textarea class="auto" id="bkBlurb" data-f="book.blurb">${esc(b.blurb)}</textarea></label>
+    <button class="btn" data-a="writeBlurb">Napisz blurb z pamięci opowieści</button>
+  </div>
+  <div class="card">
+    <div class="label">Skład</div>
+    <label class="field"><span>Numeracja rozdziałów</span><select id="bkNum" data-f="book.numbering">${Object.entries(NUMBERING).map(([k, l]) => `<option value="${k}" ${b.numbering === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="field"><span>Separator scen</span><input type="text" id="bkSep" data-f="book.sep" value="${esc(b.sep)}"></label>
+    <label class="field"><span>Cel (słowa)</span><input type="number" id="bkTarget" min="1000" step="1000" data-f="book.target" value="${b.target}"></label>
+    <label class="toggle"><span>Polska typografia: „cudzysłowy”, półpauzy w dialogach, wielokropek, sierotki</span><input type="checkbox" id="bkTypo" data-f="book.typo" ${b.typo ? 'checked' : ''}></label>
+    <label class="toggle"><span>Tylko sceny zatwierdzone (w pamięci)</span><input type="checkbox" id="bkOnly" data-f="book.onlyAccepted" ${b.onlyAccepted ? 'checked' : ''}></label>
+  </div>`;
+}
+
+A.bookMode = m => { S.bookMode = m; render(); scrollTo(0, 0); };
+A.gotoScene = id => { const ch = chapterOf(id); S.project.currentChapter = ch.id; S.sceneId = id; S.view = 'write'; saveProject(); render(); scrollTo(0, 0); };
+A.toggleInBook = id => { const sc = S.project.chapters.flatMap(c => c.scenes).find(s => s.id === id); sc.exclude = !sc.exclude; saveProject(); render(); };
+A.mvScene = arg => {
+  const [id, d] = arg.split(':'); const dir = Number(d), p = S.project;
+  const ci = p.chapters.findIndex(c => c.scenes.some(s => s.id === id)), ch = p.chapters[ci];
+  const si = ch.scenes.findIndex(s => s.id === id), [sc] = ch.scenes.splice(si, 1);
+  const ni = si + dir;
+  if (ni < 0) { ch.scenes.splice(0, 0, sc); if (ci > 0) { ch.scenes.shift(); p.chapters[ci - 1].scenes.push(sc); } }
+  else if (ni > ch.scenes.length) { if (ci < p.chapters.length - 1) p.chapters[ci + 1].scenes.unshift(sc); else ch.scenes.push(sc); }
+  else ch.scenes.splice(ni, 0, sc);
+  saveProject(); render();
+};
+A.mvChapter = arg => {
+  const [id, d] = arg.split(':'); const p = S.project, i = p.chapters.findIndex(c => c.id === id), j = i + Number(d);
+  if (j < 0 || j >= p.chapters.length) return;
+  [p.chapters[i], p.chapters[j]] = [p.chapters[j], p.chapters[i]]; saveProject(); render();
+};
+A.editChapterBook = id => {
+  const ch = S.project.chapters.find(c => c.id === id);
+  openSheet('Rozdział', `<label class="field"><span>Tytuł rozdziału</span><input type="text" id="cbTitle" value="${esc(ch.title)}" placeholder="Np. Skrzynka"></label>
+    <span class="hint">Numer („Rozdział pierwszy”) apka dodaje sama według ustawień składu. Tu wpisz sam tytuł albo zostaw „Rozdział N”.</span>
+    <label class="field"><span>Zaczyna nową część (opcjonalnie)</span><input type="text" id="cbPart" value="${esc(ch.part || '')}" placeholder="Np. Część pierwsza. Zima"></label>
+    <div class="sheet-foot"><button class="btn danger" data-a="delChapterBook" data-id="${id}" ${S.project.chapters.length < 2 ? 'disabled' : ''}>Usuń</button><button class="btn primary" data-a="saveChapterBook" data-id="${id}">Zapisz</button></div>`);
+};
+A.saveChapterBook = id => { const ch = S.project.chapters.find(c => c.id === id); ch.title = $('#cbTitle').value.trim() || ch.title; ch.part = $('#cbPart').value.trim(); saveProject(); closeSheet(); render(); };
+A.delChapterBook = (id, b) => {
+  if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Usuń razem ze scenami'; return; }
+  const p = S.project; p.chapters = p.chapters.filter(c => c.id !== id); if (!p.chapters.some(c => c.id === p.currentChapter)) p.currentChapter = p.chapters[0].id;
+  saveProject(); closeSheet(); render();
+};
+A.newChapterBook = () => { const p = S.project; const ch = { id: uid('c'), title: 'Rozdział ' + (p.chapters.length + 1), summary: '', scenes: [] }; p.chapters.push(ch); saveProject(); render(); toast('Dodano rozdział.'); };
+A.writeBlurb = async (id, b) => {
+  const p = S.project;
+  b.disabled = true; b.innerHTML = '<span class="spinner"></span> Piszę…';
+  try {
+    const sums = p.chapters.map((c, i) => `R${i + 1}: ${c.summary || c.scenes.map(s => s.summary).filter(Boolean).join(' ')}`).filter(x => x.length > 5).join('\n');
+    const chars = p.characters.map(c => `- ${c.name}: ${c.role} ${c.description}`).join('\n');
+    const r = await llm('writer', [{ role: 'system', content: 'Jesteś redaktorem polskiego wydawnictwa. Piszesz teksty na czwartą stronę okładki: konkretne, z haczykiem, bez spoilerów zakończenia, bez frazesów reklamowych typu „porywająca opowieść”.' },
+      { role: 'user', content: `Tytuł: ${p.title}\nStyl: ${p.style.guide}\nPostacie:\n${chars}\nStreszczenia rozdziałów:\n${sums}\n\nNapisz blurb na okładkę, 90–140 słów, po polsku. Zwróć tylko tekst.` }], { maxTokens: 3000 });
+    p.book.blurb = cleanOutput(r.text); saveProject(); render(); toast('Blurb gotowy. Możesz go poprawić.');
+  } finally { if (document.body.contains(b)) { b.disabled = false; b.textContent = 'Napisz blurb z pamięci opowieści'; } }
+};
+document.addEventListener('change', e => {
+  if (e.target.id === 'tocJump' && e.target.value) { document.getElementById('bk_' + e.target.value)?.scrollIntoView({ block: 'start' }); scrollBy(0, -120); e.target.value = ''; }
+});
+
+// --- zip (bez kompresji) dla EPUB i DOCX
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function makeZip(files, type) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  const d = new Date(), dosTime = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), dosDate = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  for (const f of files) {
+    const name = enc.encode(f.name), data = typeof f.data === 'string' ? enc.encode(f.data) : f.data, crc = crc32(data);
+    const flag = f.name === 'mimetype' ? 0 : 0x0800;
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, flag, true); lh.setUint16(8, 0, true);
+    lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true); lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true);
+    lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+    parts.push(new Uint8Array(lh.buffer), name, data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint16(8, flag, true); cd.setUint16(10, 0, true);
+    cd.setUint16(12, dosTime, true); cd.setUint16(14, dosDate, true); cd.setUint32(16, crc, true); cd.setUint32(20, data.length, true); cd.setUint32(24, data.length, true);
+    cd.setUint16(28, name.length, true); cd.setUint32(42, off, true);
+    central.push(new Uint8Array(cd.buffer), name);
+    off += 30 + name.length + data.length;
+  }
+  const size = central.reduce((a, x) => a + x.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, size, true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type });
+}
+const xesc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+
+function buildEpub(p) {
+  const b = p.book, st = bookStructure(p), uuid = p.epubId || (p.epubId = 'urn:uuid:' + (crypto.randomUUID?.() || uid('x')));
+  const xh = (title, body) => `<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="pl" lang="pl"><head><meta charset="utf-8"/><title>${xesc(title)}</title><link rel="stylesheet" type="text/css" href="style.css"/></head><body>${body}</body></html>`;
+  const files = [{ name: 'mimetype', data: 'application/epub+zip' },
+    { name: 'META-INF/container.xml', data: `<?xml version="1.0" encoding="UTF-8"?>\n<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>` },
+    { name: 'OEBPS/style.css', data: `body{font-family:serif;line-height:1.5;margin:0 4%;}p{margin:0;text-indent:1.4em;text-align:justify;hyphens:auto;-webkit-hyphens:auto;}p.first{text-indent:0;}h1{text-align:center;font-size:1.9em;margin:3em 0 .4em;}h2{text-align:center;font-size:.95em;font-weight:normal;letter-spacing:.15em;text-transform:uppercase;margin:3em 0 .2em;}.sub{text-align:center;font-size:1.35em;font-weight:bold;margin:0 0 2em;}.subt{text-align:center;font-style:italic;}.auth{text-align:center;margin-top:2em;letter-spacing:.1em;text-transform:uppercase;}.sep{text-align:center;margin:1.2em 0;text-indent:0;}.part{text-align:center;font-size:1.6em;margin-top:35%;}.ded{text-align:center;font-style:italic;margin-top:30%;}.motto{text-align:right;font-style:italic;margin:30% 0 0 30%;}` }];
+  const items = [], spine = [], nav = [];
+  const add = (id, title, body, inToc) => { const f = id + '.xhtml'; files.push({ name: 'OEBPS/' + f, data: xh(title, body) }); items.push(`<item id="${id}" href="${f}" media-type="application/xhtml+xml"/>`); spine.push(`<itemref idref="${id}"/>`); if (inToc) nav.push(`<li><a href="${f}">${xesc(inToc)}</a></li>`); };
+  add('tytul', p.title, `<section epub:type="titlepage"><h1>${xesc(p.title)}</h1>${b.subtitle ? `<p class="subt first">${xesc(b.subtitle)}</p>` : ''}${b.author ? `<p class="auth first">${xesc(b.author)}</p>` : ''}</section>`);
+  if (b.dedication.trim()) add('dedykacja', 'Dedykacja', `<p class="ded first">${xesc(b.dedication).replace(/\n/g, '<br/>')}</p>`);
+  if (b.motto.trim()) add('motto', 'Motto', `<p class="motto first">${xesc(b.motto).replace(/\n/g, '<br/>')}${b.mottoSource ? `<br/>— ${xesc(b.mottoSource)}` : ''}</p>`);
+  let k = 0;
+  for (const x of st) {
+    k++;
+    const id = (x.type === 'part' ? 'czesc' : 'rozdzial') + String(k).padStart(3, '0');
+    if (x.type === 'part') { add(id, x.title, `<section epub:type="part"><p class="part first">${xesc(x.title)}</p></section>`, x.title); continue; }
+    let body = `<section epub:type="chapter"><h2>${xesc(x.label)}</h2>${x.title ? `<p class="sub first">${xesc(x.title)}</p>` : ''}`;
+    x.scenes.forEach((paras, i) => { if (i) body += `<p class="sep">${xesc(b.sep)}</p>`; body += paras.map((t, j) => `<p${j === 0 ? ' class="first"' : ''}>${xesc(t)}</p>`).join(''); });
+    add(id, x.label, body + '</section>', x.label + (x.title ? '. ' + x.title : ''));
+  }
+  files.push({ name: 'OEBPS/nav.xhtml', data: xh('Spis treści', `<nav epub:type="toc" id="toc"><h2>Spis treści</h2><ol>${nav.join('')}</ol></nav>`) });
+  const mod = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  files.push({ name: 'OEBPS/content.opf', data: `<?xml version="1.0" encoding="utf-8"?>\n<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid" xml:lang="pl"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="bookid">${xesc(uuid)}</dc:identifier><dc:title>${xesc(p.title)}</dc:title><dc:language>pl</dc:language>${b.author ? `<dc:creator>${xesc(b.author)}</dc:creator>` : ''}${b.blurb ? `<dc:description>${xesc(b.blurb)}</dc:description>` : ''}<meta property="dcterms:modified">${mod}</meta></metadata><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="css" href="style.css" media-type="text/css"/>${items.join('')}</manifest><spine>${spine.join('')}</spine></package>` });
+  saveProject();
+  return makeZip(files, 'application/epub+zip');
+}
+
+function buildDocx(p) {
+  const b = p.book, st = bookStructure(p);
+  const run = t => `<w:r><w:t xml:space="preserve">${xesc(t)}</w:t></w:r>`;
+  const para = (t, style, extra = '') => `<w:p><w:pPr>${style ? `<w:pStyle w:val="${style}"/>` : ''}${extra}</w:pPr>${String(t).split('\n').map((l, i) => (i ? '<w:r><w:br/></w:r>' : '') + run(l)).join('')}</w:p>`;
+  const brk = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+  let body = para(p.title, 'Title') + (b.subtitle ? para(b.subtitle, 'Subtitle') : '') + (b.author ? para(b.author, 'Autor') : '');
+  if (b.dedication.trim()) body += brk + para(b.dedication, 'Dedykacja');
+  if (b.motto.trim()) body += brk + para(b.motto + (b.mottoSource ? '\n— ' + b.mottoSource : ''), 'Motto');
+  for (const x of st) {
+    if (x.type === 'part') { body += para(x.title, 'Czesc'); continue; }
+    body += para(x.label, 'Heading1') + (x.title ? para(x.title, 'Podtytul') : '');
+    x.scenes.forEach((paras, i) => { if (i) body += para(b.sep, 'Separator'); paras.forEach((t, j) => body += para(t, j === 0 ? 'Pierwszy' : null)); });
+  }
+  const doc = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const sty = (id, name, ppr, rpr, basedOn = 'Normal') => `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="${basedOn}"/><w:qFormat/><w:pPr>${ppr}</w:pPr><w:rPr>${rpr}</w:rPr></w:style>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman" w:eastAsia="Times New Roman"/><w:sz w:val="24"/><w:lang w:val="pl-PL"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:ind w:firstLine="709"/><w:jc w:val="both"/></w:pPr></w:style>
+${sty('Pierwszy', 'Akapit pierwszy', '<w:ind w:firstLine="0"/>', '')}
+${sty('Title', 'Title', '<w:spacing w:before="2400" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/>', '<w:b/><w:sz w:val="48"/>')}
+${sty('Subtitle', 'Subtitle', '<w:ind w:firstLine="0"/><w:jc w:val="center"/>', '<w:i/><w:sz w:val="28"/>')}
+${sty('Autor', 'Autor', '<w:spacing w:before="720"/><w:ind w:firstLine="0"/><w:jc w:val="center"/>', '<w:caps/><w:spacing w:val="20"/>')}
+${sty('Dedykacja', 'Dedykacja', '<w:spacing w:before="2400"/><w:ind w:firstLine="0"/><w:jc w:val="center"/>', '<w:i/>')}
+${sty('Motto', 'Motto', '<w:spacing w:before="2400"/><w:ind w:left="3402" w:firstLine="0"/><w:jc w:val="right"/>', '<w:i/>')}
+${sty('Czesc', 'Część', '<w:pageBreakBefore/><w:spacing w:before="3600"/><w:ind w:firstLine="0"/><w:jc w:val="center"/><w:outlineLvl w:val="0"/>', '<w:b/><w:sz w:val="36"/>')}
+${sty('Heading1', 'heading 1', '<w:keepNext/><w:pageBreakBefore/><w:spacing w:before="1440" w:after="120"/><w:ind w:firstLine="0"/><w:jc w:val="center"/><w:outlineLvl w:val="1"/>', '<w:caps/><w:spacing w:val="30"/><w:sz w:val="24"/>')}
+${sty('Podtytul', 'Tytuł rozdziału', '<w:keepNext/><w:spacing w:after="480"/><w:ind w:firstLine="0"/><w:jc w:val="center"/>', '<w:b/><w:sz w:val="32"/>')}
+${sty('Separator', 'Separator scen', '<w:spacing w:before="240" w:after="240"/><w:ind w:firstLine="0"/><w:jc w:val="center"/>', '')}
+</w:styles>`;
+  return makeZip([
+    { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>` },
+    { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>` },
+    { name: 'docProps/core.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xesc(p.title)}</dc:title><dc:creator>${xesc(b.author)}</dc:creator><dc:language>pl-PL</dc:language></cp:coreProperties>` },
+    { name: 'word/_rels/document.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { name: 'word/document.xml', data: doc },
+    { name: 'word/styles.xml', data: styles },
+  ], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+}
+
+function buildMarkdown(p) {
+  const b = p.book; let md = `# ${p.title}\n\n` + (b.subtitle ? `*${b.subtitle}*\n\n` : '') + (b.author ? `${b.author}\n\n` : '');
+  for (const x of bookStructure(p)) {
+    if (x.type === 'part') { md += `\n# ${x.title}\n\n`; continue; }
+    md += `\n## ${x.label}${x.title ? ': ' + x.title : ''}\n\n` + x.scenes.map(ps => ps.join('\n\n')).join(`\n\n${b.sep}\n\n`) + '\n';
+  }
+  return md;
+}
+
+A.bookExport = () => {
+  const s = bookStats(S.project);
+  openSheet('Eksport książki', `<span class="hint">${fmtN(s.words)} słów · ${s.ark.toFixed(1).replace('.', ',')} ark. wyd. Do eksportu trafiają sceny zaznaczone w spisie treści.</span>
+    <button class="btn primary" data-a="exportEpub">EPUB (czytniki, Apple Books, Kindle)</button>
+    <button class="btn" data-a="exportDocx">DOCX: maszynopis dla wydawnictwa</button>
+    <span class="hint">Times New Roman 12 pt, interlinia 1,5, wcięcia akapitów, każdy rozdział od nowej strony. Otworzysz w Wordzie, Pages i Google Docs.</span>
+    <button class="btn" data-a="printBook">PDF / druk (format A5)</button>
+    <span class="hint">Otwiera systemowe drukowanie. Na iPhonie: rozsuń podgląd dwoma palcami albo wybierz Udostępnij → Zapisz w Plikach, żeby mieć PDF.</span>
+    <button class="btn" data-a="exportMd">Markdown (czysty tekst)</button>`);
+};
+A.exportEpub = () => saveFile(slug(S.project.title) + '.epub', buildEpub(S.project), 'application/epub+zip');
+A.exportDocx = () => saveFile(slug(S.project.title) + '.docx', buildDocx(S.project), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+A.exportMd = () => saveFile(slug(S.project.title) + '.md', buildMarkdown(S.project), 'text/markdown');
+A.printBook = () => { $('#print').innerHTML = `<article class="book" lang="pl">${bookHtml(S.project)}</article>`; closeSheet(); setTimeout(() => window.print(), 60); };
+
+/* ============================== Start ============================== */
+function migrate(p) {
+  p.style = p.style || { guide: '', sample: '' };
+  p.tics = p.tics || { detect: true, budget: 1 };
+  p.dataset = p.dataset || { sft: [], dpo: [] };
+  p.book = { ...defaultBook(), ...(p.book || {}) };
+  if (p.banned == null) p.banned = DEFAULT_BANNED.join('\n');
+  p.characters = p.characters || []; p.events = p.events || []; p.threads = p.threads || [];
+  if (!p.chapters?.length) p.chapters = [{ id: uid('c'), title: 'Rozdział 1', summary: '', scenes: [] }];
+  if (!p.chapters.some(c => c.id === p.currentChapter)) p.currentChapter = p.chapters[0].id;
+  return p;
+}
+(async function init() {
+  await DB.open();
+  const st = await DB.get('settings');
+  S.settings = { ...DEFAULT_SETTINGS, ...(st || {}), roles: { ...DEFAULT_SETTINGS.roles, ...(st?.roles || {}) } };
+  S.projects = (await DB.get('projects')) || [];
+  if (!S.projects.length) {
+    const p = sampleProject(); await DB.set('p:' + p.id, p);
+    S.projects = [{ id: p.id, title: p.title, updated: p.updated }]; await DB.set('projects', S.projects);
+  }
+  const id = S.settings.lastProject && S.projects.some(x => x.id === S.settings.lastProject) ? S.settings.lastProject : S.projects[0].id;
+  S.project = migrate(await DB.get('p:' + id));
+  render();
+  try { navigator.storage?.persist?.(); } catch {}
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+addEventListener('beforeunload', () => { if (S.project) DB.set('p:' + S.project.id, S.project); });
+</script>
+</body>
+</html>
