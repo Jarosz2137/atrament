@@ -1049,7 +1049,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Wydane przez Atrament: $${(st.spent || 0).toFixed(4)} · wersja 1.1.1</p>`;
+  <p class="hint mono">Wydane przez Atrament: $${(st.spent || 0).toFixed(4)} · wersja 1.1.2</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1902,7 +1902,15 @@ function migrate(p) {
   S.project = migrate(await DB.get('p:' + id));
   render();
   try { navigator.storage?.persist?.(); } catch {}
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
+    }).catch(() => {});
+    // nowa wersja przejęła stronę: przeładuj raz, żeby od razu ją pokazać
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController && !reloaded && !GEN) { reloaded = true; location.reload(); } });
+  }
 })();
 // iOS (tryb aplikacji): czasem raportuje widok krótszy o pasek statusu i dolny pasek wisi nad krawędzią ekranu.
 function fixViewport() {

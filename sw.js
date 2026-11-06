@@ -1,5 +1,5 @@
 // Atrament service worker: app shell offline, zero cache dla API.
-const CACHE = 'atrament-v3';
+const CACHE = 'atrament-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -21,7 +21,7 @@ self.addEventListener('fetch', e => {
   // Własne pliki: najpierw sieć (świeże aktualizacje), offline z cache.
   if (url.origin === self.location.origin) {
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(req, { cache: 'no-cache' }).then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(req, copy));
         return res;
