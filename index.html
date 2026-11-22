@@ -413,6 +413,7 @@ const DB = {
 /* ============================== Stan ============================== */
 const DEFAULT_SETTINGS = {
   orKey: '', anKey: '', msKey: '', oaKey: '', gmKey: '', customBase: '', customKey: '', customName: 'Własny endpoint',
+  ideaCritic: true,
   roles: {
     writer: { provider: 'anthropic', model: 'claude-sonnet-5-5', temp: 0.8 },
     editor: { provider: 'anthropic', model: 'claude-sonnet-5-5', temp: 0.2 },
@@ -1018,7 +1019,7 @@ function memoryBlock(p, sc, present, mode = 'full') {
   }
   if (p.style.sample.trim() && !ideas) B.push('## PRÓBKA STYLU AUTORA (naśladuj rytm i słownictwo; nie kopiuj treści, obrazów ani pierwszego zdania)\n' + p.style.sample.trim().slice(0, 7000));
   const pres = present.map(charById).filter(Boolean);
-  if (pres.length) B.push('## POSTACIE W SCENIE\n' + pres.map(c => ideas ? charCard(c, false) : charCard(c, true, full ? 0 : 1)).join('\n\n'));
+  if (pres.length) B.push('## POSTACIE W SCENIE\n' + pres.map(c => charCard(c, true, full ? 0 : 1)).join('\n\n'));
   const others = p.characters.filter(c => !present.includes(c.id));
   if (others.length) B.push('## INNE POSTACIE (tło)\n' + others.map(c => `- ${c.name}${c.role ? ': ' + c.role : ''}${c.description ? '. ' + c.description.slice(0, 120) : ''}`).join('\n'));
   // Historia: streszczenia poprzednich rozdziałów + scen bieżącego (przy pisaniu: dawne skrótem, ostatnie dokładnie)
@@ -1072,21 +1073,24 @@ Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończy�
     const e = extra.ending ? ENDINGS[extra.ending] : null;
     parts.push('# SCENA BEZ ZAKOŃCZENIA\n' + extra.base + `\n\n# ZADANIE\nNapisz WYŁĄCZNIE zakończenie tej sceny: 1–3 akapity, które płynnie kontynuują ostatnie zdanie. Nie powtarzaj tekstu, który już jest.` + (e ? `\nTyp zakończenia (${e.label}): ${e.ins}` : '') + (ends.length ? `\nNie kończ podobnie do poprzednich scen:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
   } else if (mode === 'ideas') {
+    const n = extra.n || 5;
     const leads = p.characters.filter(c => /bohater|protagon|główn/i.test(c.role || '')).map(c => c.name);
     parts.push(`# ZADANIE
-Zaproponuj 5 wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz.
-Różnicuj świadomie, żeby nie było to pięć razy ta sama historia w innej dekoracji:
-- OBSADA: każdy pomysł ma inny skład osób.${leads.length > 1 ? ` Główna obsada to: ${leads.join(', ')}. Co najmniej 2 pomysły to sceny, w których główne postacie są RAZEM i coś się między nimi przesuwa (relacja, konflikt, odkrycie), i to one napędzają scenę, a nie stoją w tle.` : ''} Postać poboczna (spoza głównej obsady) najwyżej w 2 z 5 pomysłów. Najwyżej jeden pomysł może iść z perspektywy innej postaci bez bohatera głównego w scenie.
+Zaproponuj ${n} wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz.
+Różnicuj świadomie, żeby nie była to ta sama historia w innej dekoracji:
+- OBSADA: każdy pomysł ma inny skład osób.${leads.length > 1 ? ` Główna obsada to: ${leads.join(', ')}. Co najmniej 2 pomysły to sceny, w których główne postacie są RAZEM i coś się między nimi przesuwa (relacja, konflikt, odkrycie), i to one napędzają scenę, a nie stoją w tle.` : ''} Postać poboczna (spoza głównej obsady) najwyżej w co trzecim pomyśle. Najwyżej jeden pomysł może iść z perspektywy innej postaci bez bohatera głównego w scenie.
 - RODZAJ: jeden pomysł to bezpośrednia kontynuacja, jeden przeskok w czasie, jeden spokojna scena codzienności lub relacji, jeden zwrot albo zaskoczenie, jeden swobodny.
 - STAWKA: każdy pomysł dotyka innego wątku albo innej sprawy, a nie tego samego konfliktu z innej strony.
 Punktem wyjścia jest STAN ŚWIATA i KONIEC POPRZEDNIEJ SCENY: kto gdzie jest, co ma przy sobie, która jest pora. Nie zmieniaj pory dnia ani nie przeskakuj w czasie po cichu: jeśli pomysł dzieje się później, napisz wprost kiedy, licząc od końca poprzedniej sceny. Postać, która odeszła, nie czeka nagle w tym samym miejscu, a rzeczy nie zmieniają położenia bez powodu (rozbite auto stoi tam, gdzie się rozbiło, albo ktoś je odholował i tekst o tym wie). Jeśli pomysł zaczyna się gdzie indziej albo później, powiedz to wprost w pierwszym zdaniu.
 Każde pojawienie się postaci w pomyśle musi mieć konkretny powód w tej sytuacji: skąd się tam wzięła, jak się dowiedziała, czemu akurat teraz. Cecha postaci (np. że kogoś nachodzi) mówi, jak się zachowuje, gdy już jest, a nie usprawiedliwia, że jest wszędzie; jeśli w danej sytuacji nie ma sensownego powodu, nie wstawiaj jej.
 Nowa osoba nie może być przypadkowo spokrewniona ani powiązana z istniejącymi postaciami (kuzynka, była dziewczyna, sąsiad kogoś z obsady), chyba że pamięć to mówi; takie zbiegi okoliczności brzmią sztucznie. Nowa osoba wie tylko to, co mogła zobaczyć albo usłyszeć.
-Wolno ci wprowadzać nowe, wiarygodne sytuacje, miejsca i osoby, których nie ma w pamięci, a także przeskoki w czasie (następny dzień, tydzień później). Pamięć mówi, co już było, a nie co musi się pojawić. Co najmniej 2 z 5 pomysłów mają NIE opierać się na rekwizytach i motywach z poprzedniej sceny. To, że coś często pojawia się w pamięci (np. jakaś drobna sprawa czy przedmiot), nie znaczy, że jest ważne: nie wracaj do tego tylko dlatego, że łatwo to chwycić.
+Najpierw korzystaj z tego, co już jest w opowieści: postaci, wątków, miejsc. Nowe osoby, miejsca i przeskoki w czasie wprowadzaj tylko wtedy, gdy wynikają z sytuacji. Nie wszystkie pomysły mają opierać się na rekwizytach i motywach z poprzedniej sceny. To, że coś często pojawia się w pamięci (np. jakaś drobna sprawa czy przedmiot), nie znaczy, że jest ważne: nie wracaj do tego tylko dlatego, że łatwo to chwycić.
 Pisz poprawną, prostą polszczyzną: krótkie zdania, poprawna odmiana, żadnych dziwnych słów.
-Format: każdy pomysł w osobnej linii, dokładnie tak:
+Format odpowiedzi:
+1) Najpierw wypisz FAKTY, krótko, każdy w linii zaczynającej się od "- " (bez znaku ::): pora, kto gdzie jest, kto czym się porusza i z kim, gdzie są ważne pojazdy i przedmioty, czego kto NIE wie. Na tych faktach opieraj pomysły.
+2) Potem pomysły, każdy w osobnej linii, dokładnie tak:
 TYTUŁ :: plan sceny w 2–3 zdaniach
-Bez numeracji, bez wstępu, bez komentarzy.`);
+Bez numeracji i bez komentarzy.`);
   }
   return [{ role: 'system', content: WRITER_SYS }, { role: 'user', content: parts.join('\n\n') }];
 }
@@ -1123,7 +1127,7 @@ Zwróć JSON dokładnie w tym kształcie:
 {
   "summary": "streszczenie sceny w 2–4 zdaniach",
   "title": "krótki tytuł sceny, 1–4 słowa, konkretny, bez cudzysłowu",
-  "end_state": "zacznij od pory: dzień i pora dnia (np. ten sam dzień, późny wieczór), potem gdzie jest każda postać ze sceny na jej końcu i co robi, 1–3 zdania. Jeśli scena nie mówi tego wprost, wybierz NAJBARDZIEJ LOGICZNY stan (np. gdy gospodarz wychodzi z mieszkania i wyprasza gości, goście też wychodzą) i dopisz (domyślnie)",
+  "end_state": "lista faktów, każdy w osobnej linii (w JSON-ie oddzielone \\n): najpierw 'Pora: dzień i pora dnia' (np. ten sam dzień, późny wieczór), potem po jednej linii na każdą postać ze sceny ('Imię: gdzie jest, z kim, czym się porusza albo czym przyjechała, co ma przy sobie'), potem ważne pojazdy i przedmioty ('Nazwa: gdzie jest, w jakim stanie'). Jeśli scena nie mówi tego wprost, wybierz NAJBARDZIEJ LOGICZNY stan (np. gdy gospodarz wychodzi z mieszkania i wyprasza gości, goście też wychodzą) i dopisz (domyślnie)",
   "events": [{"text": "fakt: co się stało", "who": ["Imię"], "consequence": "skutek albo pusty tekst", "important": true}],
   "knowledge": [{"character": "Imię", "learned": "czego ta postać dowiedziała się w tej scenie"}],
   "character_updates": [{"character": "Imię", "change": "trwała zmiana: relacja, stan, decyzja"}],
@@ -1425,6 +1429,7 @@ function viewSettings() {
     <span class="hint">ZDR mocniej zawęża listę dostawców. Jeśli model przestanie odpowiadać, wyłącz ZDR. Na koncie OpenRouter możesz to też ustawić na stałe w zakładce Privacy.</span>
   </div>
   ${roleCard('writer')}
+  <div class="card"><label class="toggle"><span>Sprawdzaj pomysły krytykiem ciągłości (+1 zapytanie)</span><input type="checkbox" id="ideaCritic" data-f="settings.ideaCritic" ${st.ideaCritic !== false ? 'checked' : ''}></label><span class="hint">Pisarz daje 8 pomysłów, krytyk z pełną pamięcią odrzuca te niezgodne z kanonem. W trybie czatu krytykiem jest redaktor z API; gdy redaktor też jest ręczny, krytyk się wyłącza.</span></div>
   <div class="card"><label class="field"><span>Myślenie pisarza przed pisaniem</span><select id="reasoning" data-f="settings.reasoning">
     ${[['off', 'Wyłączone (najtaniej)'], ['low', 'Niskie'], ['medium', 'Średnie'], ['high', 'Wysokie (drożej, lepszy plan sceny)']].map(([k, l]) => `<option value="${k}" ${st.reasoning === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <span class="hint">Tokeny myślenia liczą się jak wyjście. Przy Kimi K3 zacznij od niskiego.</span></div>
@@ -1458,7 +1463,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.9 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.0 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1831,15 +1836,53 @@ A.preview = () => {
   openSheet('Co widzi model', `<span class="hint">To dokładnie trafi do pisarza. Około ${fmtN(estTok(txt))} tokenów, niezależnie od długości całej książki.</span><pre class="ctx">${esc(txt)}</pre>`);
 };
 
+const CRITIC_SYS = `Jesteś redaktorem ciągłości powieści. Sprawdzasz propozycje kolejnej sceny wyłącznie pod kątem zgodności z kanonem, nie oceniasz, czy są ciekawe. Zwracasz WYŁĄCZNIE poprawny JSON.`;
+// rola krytyka: pisarz z API; gdy pisarz jest „przez czat”, a redaktor ma API, to redaktor; gdy oba ręcznie, bez krytyka
+const criticRole = () => !isManual('writer') ? 'writer' : (!isManual('editor') ? 'editor' : null);
+function parseIdeas(text) { return cleanOutput(text).split('\n').map(l => l.replace(/^[\s\-•*\d.)]+/, '').trim()).filter(l => l.includes('::')).map(l => { const [t, ...rest] = l.split('::'); return { t: t.trim(), p: rest.join('::').trim() }; }).filter(x => x.t && x.p); }
+async function criticIdeas(p, sc, ideas) {
+  const present = [...new Set([...(sc.who || []), ...p.characters.filter(c => ideas.some(x => mentions(x.p, c))).map(c => c.id)])];
+  const prev = scenesBefore(p, sc).filter(x => x.s.text).slice(-1)[0];
+  const user = `${memoryBlock(p, sc, present, 'scene')}${prev ? '\n\n# KONIEC POPRZEDNIEJ SCENY\n…' + prev.s.text.slice(-1500) : ''}${prev?.s.endState ? '\n\n# STAN ŚWIATA NA KOŃCU POPRZEDNIEJ SCENY\n' + prev.s.endState : ''}
+
+# PROPOZYCJE
+${ideas.map((x, i) => `${i + 1}. ${x.t}: ${x.p}`).join('\n')}
+
+# SPRAWDŹ KAŻDĄ PROPOZYCJĘ
+- kto gdzie jest i czy mógł się tam znaleźć (czym przyjechał, skąd wiedział, czy pora się zgadza),
+- gdzie są pojazdy i przedmioty (np. rozbite auto nie jeździ),
+- czy ktoś wie albo mówi coś, czego według NIE WIE wiedzieć nie może, albo zna osobę, której nie poznał,
+- czy ktoś działa wbrew swojej karcie (charakter, sposób mówienia, czego nie robi),
+- czy pojawienie się postaci ma powód w tej sytuacji, a nie jest zbiegiem okoliczności.
+Drobne niedopowiedzenia, które da się naturalnie dopisać w scenie, nie są błędem.
+
+Zwróć JSON: {"verdicts":[{"n":1,"ok":true,"problem":"jeśli ok=false: krótko, co się nie zgadza"}]} dla wszystkich ${ideas.length} propozycji.`;
+  const r = await llm(criticRole(), [{ role: 'system', content: CRITIC_SYS }, { role: 'user', content: user }], { json: true, temp: 0.1, maxTokens: 3000 });
+  const d = parseJSON(r.text);
+  const v = Array.isArray(d?.verdicts) ? d.verdicts : [];
+  ideas.forEach((x, i) => { const z = v.find(y => Number(y?.n) === i + 1); if (z && z.ok === false) x.bad = String(z.problem || 'niezgodne z kanonem'); });
+  return r.usage;
+}
 A.ideas = async () => {
-  const sc = curScene();
+  const sc = curScene(), p = S.project;
+  const useCritic = S.settings.ideaCritic !== false && !!criticRole();
   openSheet('Pomysły na scenę', loader('Pisarz przegląda wątki i wydarzenia…'));
   const cheap = !!curEngineModel().cheap || !!curEngineModel().free;
-  const r = await llm('writer', buildWriterMessages(S.project, sc, 'ideas'), { temp: cheap ? Math.min(0.8, S.settings.roles.writer.temp) : Math.min(1.0, S.settings.roles.writer.temp + 0.15) }).catch(e => { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; });
-  const ideas = cleanOutput(r.text).split('\n').map(l => l.replace(/^[\s\-•*\d.)]+/, '').trim()).filter(l => l.includes('::')).map(l => { const [t, ...rest] = l.split('::'); return { t: t.trim(), p: rest.join('::').trim() }; });
-  S.ui = { ideas };
+  const r = await llm('writer', buildWriterMessages(p, sc, 'ideas', { n: useCritic ? 8 : 5 }), { temp: cheap ? Math.min(0.8, S.settings.roles.writer.temp) : Math.min(1.0, S.settings.roles.writer.temp + 0.15) }).catch(e => { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; });
+  let ideas = parseIdeas(r.text);
   if (!ideas.length) return setSheet(`<div class="banner warn">Model nie zwrócił pomysłów w oczekiwanym formacie.</div><pre class="ctx">${esc(r.text)}</pre>`);
-  setSheet(ideas.map((x, i) => `<div class="variant"><h3>${esc(x.t)}</h3><p>${esc(x.p)}</p><button class="btn sm primary" data-a="useIdea" data-id="${i}">Użyj jako planu</button></div>`).join('') + `<span class="hint mono">${esc(usageLine(r.usage))}</span>`);
+  let cu = null, criticFailed = false;
+  if (useCritic) {
+    setSheet(loader('Krytyk sprawdza pomysły z kanonem: kto gdzie jest, kto co wie…'));
+    try { cu = await criticIdeas(p, sc, ideas); } catch (e) { if (e.name === 'AbortError') { closeSheet(); return; } criticFailed = true; }
+  }
+  const good = ideas.filter(x => !x.bad).slice(0, 5), bad = ideas.filter(x => x.bad);
+  S.ui = { ideas: [...good, ...bad] };
+  const card = (x, i) => `<div class="variant"><h3>${esc(x.t)}</h3><p>${esc(x.p)}</p>${x.bad ? `<p class="hint">Krytyk: ${esc(x.bad)}</p>` : ''}<button class="btn sm ${x.bad ? '' : 'primary'}" data-a="useIdea" data-id="${i}">Użyj jako planu</button></div>`;
+  setSheet((criticFailed ? '<div class="banner warn small">Krytyk nie odpowiedział, pokazuję pomysły bez sprawdzenia.</div>' : '')
+    + (good.length ? good.map(card).join('') : '<div class="banner warn">Krytyk odrzucił wszystkie pomysły. Niżej są z uzasadnieniem, możesz któryś poprawić ręcznie.</div>')
+    + (bad.length ? `<details class="card"><summary class="label">Odrzucone przez krytyka (${bad.length})</summary>${bad.map((x, k) => card(x, good.length + k)).join('')}</details>` : '')
+    + `<span class="hint mono">${esc(usageLine(r.usage))}${cu ? ' · krytyk: ' + esc(usageLine(cu)) : ''}</span>`);
 };
 A.useIdea = i => {
   const x = S.ui.ideas?.[i]; const sc = curScene(); if (!x || !sc) return;
