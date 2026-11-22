@@ -862,9 +862,10 @@ function charCard(c, full) {
     if (c.motivation) L.push('Motywacja: ' + c.motivation);
     if (c.voice) L.push('Sposób mówienia: ' + c.voice);
     if (c.relations) L.push('Relacje: ' + c.relations);
-    if (c.changes?.length) L.push('Zmiany w toku opowieści: ' + c.changes.slice(-8).join('; '));
+    if (c.changes?.length) L.push('Co się z nią już stało (fakty z wcześniejszych scen): ' + c.changes.slice(-8).join('; '));
     if (c.knows?.length) L.push('WIE: ' + c.knows.slice(-15).join('; '));
     if (c.unknown) L.push('NIE WIE (nie może się tym posługiwać ani o tym wspominać): ' + c.unknown);
+    if ((c.arc || '').trim()) L.push('PLAN AUTORA NA PRZYSZŁOŚĆ (to się JESZCZE NIE wydarzyło; nie pisz tego jako faktu; prowadź fabułę powoli w tę stronę, nie przeskakuj do tego): ' + c.arc.trim());
   }
   return L.join('\n');
 }
@@ -904,6 +905,8 @@ Zasady:
 - Pokazuj zamiast mówić. Konkret zamiast ogólników. Bez purpurowej prozy i bez patosu.
 - Zakończenie: nie kończ podsumowaniem, morałem ani refleksją narratora. Żadnych krótkich, jednozdaniowych akapitów-puent na końcu (np. „I to było wszystko.”, „To było jego.”, „Bo to było wieczne.”). Żadnej anafory „I to było…”. Czytelnik sam wyciąga wnioski.
 - Nie używaj fraz z listy ZAKAZANE ani ich parafraz.
+- Sekcja REALIA służy poprawności, a nie jako materiał do tekstu. Nie przepisuj z niej opisów technicznych do prozy; używaj ich tylko tam, gdzie scena naprawdę tego wymaga.
+- Trzymaj skalę opowieści. Nie dokładaj na siłę eskalacji (wypadków, włamań, nagłych katastrof), jeśli nie wynikają z planu sceny albo z wcześniejszych wydarzeń.
 - Zwracasz wyłącznie tekst prozy. Bez tytułu, bez komentarzy, bez markdown.`;
 
 function memoryBlock(p, sc, present) {
@@ -979,7 +982,7 @@ const MEMORY_SYS = `Jesteś archiwistą powieści. Czytasz nową scenę i aktual
 
 function buildExtractMessages(p, sc) {
   const present = p.characters.filter(c => (sc.who || []).includes(c.id) || mentions(sc.text, c)).map(c => c.id);
-  const chars = p.characters.map(c => `- ${c.name}${c.aliases ? ' (' + c.aliases + ')' : ''}${c.role ? ': ' + c.role : ''}${present.includes(c.id) && c.knows?.length ? ' | wie: ' + c.knows.slice(-10).join('; ') : ''}${present.includes(c.id) && c.unknown ? ' | NIE wie: ' + c.unknown : ''}`).join('\n') || '(brak)';
+  const chars = p.characters.map(c => `- ${c.name}${c.aliases ? ' (' + c.aliases + ')' : ''}${c.role ? ': ' + c.role : ''}${present.includes(c.id) && c.knows?.length ? ' | już wie: ' + c.knows.join('; ') : ''}${present.includes(c.id) && c.changes?.length ? ' | już zapisane zmiany: ' + c.changes.join('; ') : ''}${present.includes(c.id) && c.unknown ? ' | NIE wie: ' + c.unknown : ''}`).join('\n') || '(brak)';
   const th = p.threads.filter(t => t.status === 'open').map(t => `- ${t.id}: ${t.text}`).join('\n') || '(brak)';
   const evs = relevantEvents(p, sc, present, 20).map(e => evLine(p, e)).join('\n') || '(brak)';
   const user = `ZNANE POSTACIE:
@@ -1006,6 +1009,7 @@ Zwróć JSON dokładnie w tym kształcie:
   "threads_closed": [{"id": "identyfikator z listy", "resolution": "jak się rozwiązał"}],
   "continuity": ["sprzeczność sceny z kanonem albo z tym, co postać może wiedzieć; pusta lista, jeśli brak"]
 }
+Nie dodawaj do "knowledge" ani "character_updates" niczego, co już jest zapisane przy postaci (nawet innymi słowami). "character_updates" to tylko trwałe, NOWE zmiany (relacja, decyzja, sytuacja), a nie powtarzanie, że ktoś „nadal” coś robi.
 Wydarzenia: 2–8 najważniejszych faktów, nie opisy nastroju. "important": true tylko dla faktów, które będą miały znaczenie później. Nie dodawaj jako nowe postaci, które są już na liście znanych.`;
   return [{ role: 'system', content: MEMORY_SYS }, { role: 'user', content: user }];
 }
@@ -1151,6 +1155,7 @@ function viewScene(p, sc) {
       <button class="btn grow" data-a="ideas" ${busy ? 'disabled' : ''}>Pomysły</button>
       <button class="btn ghost" data-a="preview">Co widzi model</button>
     </div>
+    ${!sc.plan.trim() && !sc.text.trim() ? '<div class="banner info small">Bez planu model sam wymyśla, co dalej, i z każdą sceną coraz bardziej odpływa. Wpisz 1–2 zdania albo użyj „Pomysły”.</div>' : ''}
     <div class="hint" id="ctxSize">Kontekst: ~${fmtN(estTok(buildWriterMessages(p, sc, 'scene', { ending: 'cliff' }).map(m => m.content).join('')))} tokenów</div>
   </div></details>
   <div id="ticBanner"></div>
@@ -1192,6 +1197,7 @@ function viewMemory() {
   if (S.memTab === 'chars') {
     body = `<div class="list">${p.characters.map(c => `<button class="item" data-a="editChar" data-id="${c.id}"><div class="body"><span class="t">${esc(c.name)} ${c.role ? `<span class="muted small">· ${esc(c.role)}</span>` : ''}</span><span class="d">${esc(c.description || c.motivation || 'Bez opisu')}</span></div><div class="side"><span class="tag acc">wie: ${c.knows?.length || 0}</span></div></button>`).join('') || '<div class="empty">Brak postaci. Dodaj je ręcznie albo zatwierdź scenę, a archiwista zaproponuje nowe.</div>'}</div>
     <button class="btn primary" data-a="editChar">Dodaj postać</button>
+    ${p.characters.some(c => (c.knows?.length || 0) + (c.changes?.length || 0) > 4) ? '<button class="btn" data-a="consolidateAll">Uporządkuj pamięć wszystkich postaci</button>' : ''}
     <p class="hint">Pola „Wie” i „Nie wie” pilnują, żeby postać nie zdradziła informacji, których nie ma prawa znać. „Wie” uzupełnia się samo po każdej scenie.</p>`;
   } else if (S.memTab === 'events') {
     const filt = S.evFilter;
@@ -1325,7 +1331,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.8.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1943,21 +1949,72 @@ A.runImport = async () => {
 
 // --- postacie, wydarzenia, wątki
 A.editChar = id => {
-  const c = id ? charById(id) : { id: '', name: '', aliases: '', role: '', description: '', motivation: '', voice: '', relations: '', knows: [], unknown: '', changes: [] };
+  const c = id ? charById(id) : { id: '', name: '', aliases: '', role: '', description: '', motivation: '', voice: '', relations: '', knows: [], unknown: '', changes: [], arc: '' };
   const f = (k, label, ph, area) => `<label class="field"><span>${label}</span>${area ? `<textarea class="auto" id="c_${k}" placeholder="${esc(ph)}">${esc(Array.isArray(c[k]) ? c[k].join('\n') : c[k])}</textarea>` : `<input type="text" id="c_${k}" value="${esc(c[k])}" placeholder="${esc(ph)}">`}</label>`;
   openSheet(id ? c.name : 'Nowa postać', `${f('name', 'Imię', 'Hanna')}${f('aliases', 'Inne nazwy (po przecinku)', 'Hania, Kowalska')}${f('role', 'Rola', 'protagonistka')}
     ${f('description', 'Kim jest', 'Wiek, wygląd, charakter, sytuacja', 1)}${f('motivation', 'Motywacja', 'Czego chce i czego się boi', 1)}
     ${f('voice', 'Sposób mówienia', 'Krótko, ironicznie, unika pytań wprost', 1)}${f('relations', 'Relacje', 'Z kim i jak', 1)}
     ${f('knows', 'Wie (jedna rzecz w linii)', 'Uzupełnia się po scenach', 1)}${f('unknown', 'Nie wie', 'Sekrety, których ta postać nie zna', 1)}
-    ${f('changes', 'Zmiany w toku opowieści (jedna w linii)', '', 1)}
+    ${f('changes', 'Co się z nią już stało (jedna rzecz w linii)', 'Uzupełnia się po scenach', 1)}
+    ${f('arc', 'Plan na przyszłość (jeszcze się NIE wydarzyło)', 'Np. W R3 siada w M4 Kacpra i jeździ lepiej od niego, ale tego nie zauważa', 1)}
+    <span class="hint">Planów nie wpisuj do „Co się już stało”: model potraktuje je jak fakty. Tu wpisz kierunek, w którym postać ma iść.</span>
+    ${id ? `<button class="btn" data-a="consolidate" data-id="${id}">Uporządkuj „Wie” i „Co się już stało”</button>` : ''}
     <div class="sheet-foot">${id ? `<button class="btn danger" data-a="delChar" data-id="${id}">Usuń</button>` : ''}<button class="btn primary" data-a="saveChar" data-id="${id || ''}">Zapisz</button></div>`);
+};
+A.consolidate = async (id, b) => {
+  const c = charById(id); if (!c) return;
+  // najpierw zapisz to, co jest w formularzu
+  const g = k => $('#c_' + k)?.value.trim() ?? '';
+  Object.assign(c, { knows: lines(g('knows')), changes: lines(g('changes')), arc: g('arc'), unknown: g('unknown') });
+  saveProject();
+  b.disabled = true; b.innerHTML = '<span class="spinner"></span> Porządkuję…';
+  const user = `POSTAĆ: ${c.name}\nKim jest: ${c.description}\n\nWIE (lista do uporządkowania):\n${(c.knows || []).map(x => '- ' + x).join('\n') || '—'}\n\nCO SIĘ JUŻ STAŁO (lista do uporządkowania):\n${(c.changes || []).map(x => '- ' + x).join('\n') || '—'}\n\nNIE WIE (nie ruszaj, tylko do kontroli sprzeczności):\n${c.unknown || '—'}\n\nUporządkuj obie listy:\n- połącz powtórzenia i wpisy mówiące to samo innymi słowami w jeden,\n- usuń wpisy sprzeczne z nowszymi (zostaw stan aktualny),\n- wpisy, które są planami na przyszłość, a nie czymś, co już się stało, przenieś do "arc",\n- wpisy z WIE sprzeczne z NIE WIE wypisz w "conflicts" (nie usuwaj ich sam),\n- zachowaj oznaczenia rozdziałów typu (R1), kolejność chronologiczną i wszystkie istotne fakty.\nZwróć WYŁĄCZNIE JSON: {"knows":["..."],"changes":["..."],"arc":["..."],"conflicts":["..."]}`;
+  let r;
+  try { r = await llm('memory', [{ role: 'system', content: 'Porządkujesz notatki o postaci powieści. Nie wymyślasz nowych faktów. Zwracasz WYŁĄCZNIE JSON.' }, { role: 'user', content: user }], { json: true, temp: 0.1 }); }
+  catch (e) { b.disabled = false; b.textContent = 'Uporządkuj „Wie” i „Co się już stało”'; throw e; }
+  const d = parseJSON(r.text);
+  if (!d || !Array.isArray(d.knows)) { b.disabled = false; b.textContent = 'Uporządkuj „Wie” i „Co się już stało”'; return toast('Archiwista zwrócił coś nieczytelnego. Spróbuj ponownie.', true); }
+  const arr = v => (Array.isArray(v) ? v : []).map(String).map(x => x.trim()).filter(Boolean);
+  S.ui = { cons: { id, knows: arr(d.knows), changes: arr(d.changes), arc: arr(d.arc), conflicts: arr(d.conflicts) } };
+  const x = S.ui.cons, list = a => a.length ? '<ul style="margin:4px 0 0;padding-left:18px">' + a.map(v => '<li>' + esc(v) + '</li>').join('') + '</ul>' : '<div class="muted small">—</div>';
+  openSheet('Porządki: ' + c.name, `
+    ${x.conflicts.length ? `<div class="banner warn"><b>Sprzeczne z „Nie wie”:</b>${list(x.conflicts)}<span class="small">Popraw ręcznie po zastosowaniu.</span></div>` : ''}
+    <div class="card"><div class="label">Wie (było ${(c.knows || []).length}, będzie ${x.knows.length})</div>${list(x.knows)}</div>
+    <div class="card"><div class="label">Co się już stało (było ${(c.changes || []).length}, będzie ${x.changes.length})</div>${list(x.changes)}</div>
+    ${x.arc.length ? `<div class="card"><div class="label">Przeniesione do planu na przyszłość</div>${list(x.arc)}</div>` : ''}
+    <div class="sheet-foot"><button class="btn" data-a="closeSheet">Anuluj</button><button class="btn primary" data-a="applyConsolidate">Zastosuj</button></div>`);
+};
+A.applyConsolidate = () => {
+  const x = S.ui.cons, c = charById(x.id); if (!c) return;
+  c.knows = x.knows; c.changes = x.changes;
+  if (x.arc.length) c.arc = [(c.arc || '').trim(), ...x.arc].filter(Boolean).join('\n');
+  saveProject(); closeSheet(); render(); toast('Uporządkowano. Postać jest czytelniejsza dla modelu.');
+};
+A.consolidateAll = async (id, b) => {
+  const cs = S.project.characters.filter(c => (c.knows?.length || 0) + (c.changes?.length || 0) > 4);
+  if (!cs.length) return toast('Nie ma czego porządkować.');
+  b.disabled = true;
+  let done = 0;
+  for (const c of cs) {
+    b.innerHTML = `<span class="spinner"></span> ${esc(c.name)} (${++done}/${cs.length})…`;
+    try {
+      const user = `POSTAĆ: ${c.name}\nWIE:\n${(c.knows || []).map(x => '- ' + x).join('\n')}\nCO SIĘ JUŻ STAŁO:\n${(c.changes || []).map(x => '- ' + x).join('\n')}\nNIE WIE:\n${c.unknown || '—'}\n\nPołącz powtórzenia, usuń wpisy sprzeczne z nowszymi, plany na przyszłość przenieś do "arc". Nie wymyślaj nowych faktów, zachowaj (R1) itd. Zwróć WYŁĄCZNIE JSON: {"knows":[],"changes":[],"arc":[]}`;
+      const r = await llm('memory', [{ role: 'system', content: 'Porządkujesz notatki o postaci powieści. Zwracasz WYŁĄCZNIE JSON.' }, { role: 'user', content: user }], { json: true, temp: 0.1 });
+      const d = parseJSON(r.text);
+      if (d && Array.isArray(d.knows) && d.knows.length) {
+        c.knows = d.knows.map(String); c.changes = (d.changes || []).map(String);
+        if (d.arc?.length) c.arc = [(c.arc || '').trim(), ...d.arc.map(String)].filter(Boolean).join('\n');
+      }
+    } catch (e) { console.warn(e); }
+  }
+  saveProject(); render(); toast('Uporządkowano pamięć postaci. Sprawdź je w karcie każdej postaci.');
 };
 A.saveChar = id => {
   const g = k => $('#c_' + k).value.trim();
   const name = g('name'); if (!name) return toast('Podaj imię.', true);
   let c = id ? charById(id) : null;
   if (!c) { c = { id: uid('ch') }; S.project.characters.push(c); }
-  Object.assign(c, { name, aliases: g('aliases'), role: g('role'), description: g('description'), motivation: g('motivation'), voice: g('voice'), relations: g('relations'), knows: lines(g('knows')), unknown: g('unknown'), changes: lines(g('changes')) });
+  Object.assign(c, { name, aliases: g('aliases'), role: g('role'), description: g('description'), motivation: g('motivation'), voice: g('voice'), relations: g('relations'), knows: lines(g('knows')), unknown: g('unknown'), changes: lines(g('changes')), arc: g('arc') });
   saveProject(); closeSheet(); render();
 };
 A.delChar = (id, b) => {
