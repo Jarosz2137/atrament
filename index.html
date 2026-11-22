@@ -1308,7 +1308,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.8 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1467,7 +1467,7 @@ function pushHistory(sc) { if (sc.text.trim()) { sc.history = [...(sc.history ||
 A.undo = () => { const sc = curScene(); if (!sc.history?.length) return; sc.text = sc.history.pop(); saveProject(); render(); toast('Przywrócono poprzednią wersję.'); };
 
 // --- pisanie
-async function streamInto(sc, messages, { append } = {}) {
+async function streamInto(sc, messages, { append, quiet } = {}) {
   const prev = sc.text.replace(/\s+$/, '');
   // dopisywanie: jeśli tekst urywa się w pół słowa albo zdania, doklej bez nowego akapitu
   const joinTo = c => {
@@ -1491,6 +1491,7 @@ async function streamInto(sc, messages, { append } = {}) {
     });
     sc.text = joinTo(cleanOutput(r.text));
     sc.usage = r.usage;
+    if (quiet || cutOff(r, sc)) return r;
     if (r.finish === 'length') toast('Model doszedł do limitu długości odpowiedzi i urwał tekst. Użyj „Dopisz dalej”, dokończy od tego miejsca.', true);
     else if (r.finish === 'filter') toast('Dostawca modelu przerwał tekst filtrem treści. Spróbuj przeformułować plan albo zmień model.', true);
     else if (r.finish === 'none' && /\p{L}$/u.test(sc.text)) toast('Odpowiedź urwała się w pół słowa (zerwane połączenie?). Użyj „Dopisz dalej”.', true);
@@ -1510,16 +1511,28 @@ A.generate = async () => {
   const ending = sc.ending === 'auto' ? pickEnding(p, sc) : sc.ending;
   const messages = buildWriterMessages(p, sc, 'scene', { ending });
   pushHistory(sc); sc.text = ''; sc.endingUsed = ending; sc.status = 'draft';
-  const r = await streamInto(sc, messages);
+  let r = await streamInto(sc, messages);
+  r = await autoFinish(sc, r);
   if (r) { sc.gen = { messages, output: sc.text, model: r.model, at: Date.now() }; saveProject(); }
 };
 A.continue = async () => {
   if (GEN) return;
   const sc = curScene(); const messages = buildWriterMessages(S.project, sc, 'continue');
   pushHistory(sc);
-  const r = await streamInto(sc, messages, { append: true });
+  let r = await streamInto(sc, messages, { append: true });
+  r = await autoFinish(sc, r);
   if (r && sc.gen) { sc.gen.output = sc.text; saveProject(); }
 };
+// Gdy odpowiedź urwie się w pół zdania (limit długości albo zerwane połączenie), dopisz resztę automatycznie, maks. 2 razy.
+const cutOff = (r, sc) => r && (r.finish === 'length' || (r.finish === 'none' && !/[.!?…"”»]\s*$/.test(sc.text)));
+async function autoFinish(sc, r) {
+  for (let i = 0; i < 2 && cutOff(r, sc); i++) {
+    toast('Tekst urwał się w pół zdania, dopisuję resztę…');
+    r = await streamInto(sc, buildWriterMessages(S.project, sc, 'continue'), { append: true, quiet: true });
+  }
+  if (cutOff(r, sc)) toast(r.finish === 'length' ? 'Model dalej ucina odpowiedzi (limit długości). Zmień model albo dokończ ręcznie.' : 'Odpowiedź znowu się urwała. Sprawdź internet i nie wychodź z apki podczas pisania.', true);
+  return r;
+}
 A.stop = () => GEN?.ctrl.abort();
 
 A.cutTail = () => {
