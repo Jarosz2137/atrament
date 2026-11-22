@@ -942,7 +942,8 @@ function buildWriterMessages(p, sc, mode, extra = {}) {
   const present = sc.who || [];
   const parts = [memoryBlock(p, sc, present)];
   const prev = scenesBefore(p, sc).filter(x => x.s.text).slice(-1)[0];
-  if (prev && mode !== 'ideas') parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(-900));
+  const jump = sc.cont === 'jump';
+  if (prev && mode !== 'ideas' && (!jump || mode !== 'scene')) parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(-900));
   const ends = lastEndings(p, sc);
   const starts = lastOpenings(p, sc);
   const startsNote = starts.length ? `\nPoprzednie sceny zaczynały się tak. Zacznij INACZEJ: inne pierwsze zdanie, inny obraz, inny punkt wejścia (np. od środka dialogu, od ruchu, od innego miejsca czy zmysłu):\n${starts.map(x => '- „' + x + '…”').join('\n')}` : '';
@@ -950,7 +951,9 @@ function buildWriterMessages(p, sc, mode, extra = {}) {
     const e = ENDINGS[extra.ending];
     parts.push(`# ZADANIE
 Napisz NOWĄ scenę „${sc.title}”. Cel długości: ok. ${sc.words} słów. Osiągaj go treścią, nie watą: rozpisz scenę na kilka wyraźnych etapów i nie streszczaj tego, co można pokazać. Nie dopychaj długości pustym dialogiem, powtórzeniami ani opisami bez funkcji. Jeśli scena naturalnie potrzebuje mniej, napisz mniej.
-Realia: nie mieszaj świata symulatora z prawdziwym samochodem bez wyjaśnienia w tekście, co dokładnie się przenosi, a co nie. Podawaj jednostki (np. PSI w grze, bar w aucie). Postacie mogą się mylić, ale wtedy tekst ma to pokazać. Nie powtarzaj ani nie przepisuj poprzedniej sceny: ta scena dzieje się później i wnosi coś nowego.${startsNote}
+Realia: trzymaj się sekcji REALIA i kanonu. Liczby podawaj z jednostkami i tylko wtedy, gdy jesteś pewien. Postacie mogą się mylić, ale wtedy tekst ma to pokazać.
+${jump ? 'CIĄGŁOŚĆ: ta scena NIE zaczyna się tam, gdzie skończyła się poprzednia. Jest przeskok w czasie lub miejscu. Nie wracaj do sytuacji z końca poprzedniej sceny, chyba że plan tego wymaga; najwyżej wspomnij jednym zdaniem, co się stało w międzyczasie, jeśli to potrzebne.' : 'CIĄGŁOŚĆ: scena może zaczynać się po poprzedniej, ale o tym, gdzie i co się dzieje, decyduje PLAN SCENY, a nie koniec poprzedniej sceny.'}
+${(sc.where || '').trim() ? 'GDZIE I KIEDY: ' + sc.where.trim() + ' (to jest wiążące).' : ''}
 Plan sceny: ${sc.plan.trim() || '(brak, poprowadź akcję naturalnie dalej, korzystając z otwartych wątków)'}
 Postacie obecne: ${whoNames(present).join(', ') || 'według planu'}.
 Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończyły się tak. Nie kończ podobnie ani podobną konstrukcją:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
@@ -1147,6 +1150,8 @@ function viewScene(p, sc) {
     <label class="field"><span>Co się dzieje</span><textarea class="auto" id="scenePlan" data-f="scene.plan" placeholder="Np. Hanna konfrontuje Tomka w porcie. On kłamie o tamtej nocy, ona to wyczuwa, ale nie zdradza listu.">${esc(sc.plan)}</textarea></label>
     <div class="field"><span>Kto jest w scenie</span><div class="chips">${chips}</div>
       ${p.characters.length ? '<div><button class="btn ghost sm" data-a="detectWho">Wykryj z planu</button></div>' : ''}</div>
+    <div class="row"><label class="field grow"><span>Ciągłość</span><select id="sceneCont" data-f="scene.cont"><option value="direct" ${sc.cont !== 'jump' ? 'selected' : ''}>Ciąg dalszy poprzedniej sceny</option><option value="jump" ${sc.cont === 'jump' ? 'selected' : ''}>Przeskok: inne miejsce lub czas</option></select></label>
+      <label class="field grow"><span>Gdzie i kiedy (opcjonalnie)</span><input type="text" id="sceneWhere" data-f="scene.where" value="${esc(sc.where || '')}" placeholder="Np. dwa dni później, parking pod galerią"></label></div>
     <div class="row"><label class="field grow"><span>Zakończenie</span><select id="sceneEnding" data-f="scene.ending">${endOpts}</select></label>
       <label class="field grow"><span>Długość</span><select id="sceneWords" data-f="scene.words">${lenOpts}</select></label>
       <label class="field grow"><span>Model</span><select id="engineQuick">${Object.entries(ENGINES).map(([k, e]) => `<optgroup label="${e.label}${S.settings[PROVIDERS[e.prov].keyField] ? '' : ' (brak klucza)'}">${e.models.map(m => `<option value="${k}:${m.id}" ${S.settings.engine === k && curEngineModel().id === m.id ? 'selected' : ''}>${esc(m.name)} · ${esc(m.c)}</option>`).join('')}</optgroup>`).join('')}</select></label></div>
@@ -1331,7 +1336,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
