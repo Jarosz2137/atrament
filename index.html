@@ -911,7 +911,7 @@ function buildWriterMessages(p, sc, mode, extra = {}) {
   if (mode === 'scene') {
     const e = ENDINGS[extra.ending];
     parts.push(`# ZADANIE
-Napisz NOWĄ scenę „${sc.title}”. Długość to wymaganie: co najmniej ${Math.round(sc.words * 0.9)} słów, celuj w ${sc.words}. Żeby ją wypełnić, rozpisz scenę na 4–6 wyraźnych etapów (przyjście, rozmowa, napięcie, zmiana) i daj każdemu dialog, gesty i konkret. Nie streszczaj.
+Napisz NOWĄ scenę „${sc.title}”. Cel długości: ok. ${sc.words} słów. Osiągaj go treścią, nie watą: rozpisz scenę na kilka wyraźnych etapów i nie streszczaj tego, co można pokazać. Nie dopychaj długości pustym dialogiem, powtórzeniami ani opisami bez funkcji. Jeśli scena naturalnie potrzebuje mniej, napisz mniej.
 Realia: nie mieszaj świata symulatora z prawdziwym samochodem bez wyjaśnienia w tekście, co dokładnie się przenosi, a co nie. Podawaj jednostki (np. PSI w grze, bar w aucie). Postacie mogą się mylić, ale wtedy tekst ma to pokazać. Nie powtarzaj ani nie przepisuj poprzedniej sceny: ta scena dzieje się później i wnosi coś nowego.${startsNote}
 Plan sceny: ${sc.plan.trim() || '(brak, poprowadź akcję naturalnie dalej, korzystając z otwartych wątków)'}
 Postacie obecne: ${whoNames(present).join(', ') || 'według planu'}.
@@ -1118,7 +1118,7 @@ function viewScene(p, sc) {
   </div></details>
   <div id="ticBanner"></div>
   <textarea class="prose auto ${busy ? 'streaming' : ''}" id="sceneText" data-f="scene.text" placeholder="Tu pojawi się scena. Możesz też pisać sam: model i archiwista pracują na tym, co tu jest." aria-label="Tekst sceny">${esc(sc.text)}</textarea>
-  ${hasText && !busy && sc.endingUsed && wc(sc.text) < sc.words * 0.8 ? `<div class="banner warn"><div><b>Za krótka:</b> ${fmtN(wc(sc.text))} z zamówionych ~${fmtN(sc.words)} słów.</div><div><button class="btn sm" data-a="expand">Rozwiń do ~${fmtN(sc.words)} słów</button></div></div>` : ''}
+  ${hasText && !busy && sc.endingUsed && wc(sc.text) < sc.words * 0.6 ? `<div class="banner info"><div><b>Krótsza niż cel:</b> ${fmtN(wc(sc.text))} z ~${fmtN(sc.words)} słów. Jeśli czegoś w niej brakuje, możesz ją rozwinąć.</div><div><button class="btn sm" data-a="expand">Rozwiń treścią</button></div></div>` : ''}
   <div class="meta-line"><span>${fmtN(wc(sc.text))} słów</span>${sc.endingUsed ? `<span>Zakończenie: ${ENDINGS[sc.endingUsed]?.label || ''}</span>` : ''}${sc.usage ? `<span class="mono">${esc(usageLine(sc.usage))}</span>` : ''}</div>
   ${busy ? `<button class="btn block" data-a="stop"><span class="spinner"></span> Zatrzymaj</button>` : `
   <div class="actions">
@@ -1283,7 +1283,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.6 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.6.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1496,17 +1496,17 @@ A.expand = async () => {
   if (GEN) return;
   const p = S.project, sc = curScene(), have = wc(sc.text);
   const msgs = buildWriterMessages(p, sc, 'scene', { ending: sc.endingUsed || 'cliff' });
-  msgs[1].content += `\n\n# OBECNA WERSJA SCENY (${have} słów)\n${sc.text}\n\n# ZADANIE ZAMIAST POWYŻSZEGO\nScena jest za krótka. Zwróć CAŁĄ scenę rozwiniętą do ok. ${sc.words} słów: zachowaj wszystkie wydarzenia, kolejność, początek i zakończenie, ale rozbuduj środek o dialog, gesty, konkretne szczegóły i reakcje postaci. Nie dopisuj nowego zakończenia ani podsumowania. Zwróć tylko tekst sceny.`;
+  msgs[1].content += `\n\n# OBECNA WERSJA SCENY (${have} słów)\n${sc.text}\n\n# ZADANIE ZAMIAST POWYŻSZEGO\nScena jest krótsza niż cel (ok. ${sc.words} słów). Zwróć CAŁĄ scenę rozwiniętą TREŚCIĄ: pokaż to, co teraz jest streszczone, dodaj brakujące etapy z planu, napięcie, reakcje i konkretne szczegóły, które coś wnoszą (charakter, relacje, wątki). Nie dodawaj pustego dialogu, powtórzeń ani opisów bez funkcji: lepiej krótsza scena niż napompowana. Zachowaj wszystkie wydarzenia, kolejność, początek i zakończenie. Nie dopisuj nowego zakończenia ani podsumowania. Zwróć tylko tekst sceny.`;
   pushHistory(sc);
   const r = await streamInto(sc, msgs);
   if (r) { if (sc.gen) sc.gen.output = sc.text; toast(`Rozwinięto do ${fmtN(wc(sc.text))} słów.`); saveProject(); render(); }
 };
-const FACT_SYS = `Jesteś redaktorem merytorycznym powieści i konsultantem technicznym (motoryzacja, simracing, fizyka, realia polskie). Szukasz w scenie błędów merytorycznych i logicznych, które przeoczyłby czytelnik niezaznajomiony z tematem: pomieszane konteksty (gra a prawdziwe auto), złe lub brakujące jednostki, liczby nierealne w danym kontekście, zbyt kategoryczne wnioski, sprzeczności z kanonem i z tym, co postać może wiedzieć, oraz niespełnione wymagania zadania (długość, typ zakończenia). Nie oceniasz stylu ani gramatyki. Zwracasz WYŁĄCZNIE JSON.`;
+const FACT_SYS = `Jesteś redaktorem merytorycznym powieści i konsultantem technicznym (motoryzacja, simracing, fizyka, realia polskie). Szukasz w scenie błędów merytorycznych i logicznych, które przeoczyłby czytelnik niezaznajomiony z tematem: pomieszane konteksty (gra a prawdziwe auto), złe lub brakujące jednostki, liczby nierealne w danym kontekście, zbyt kategoryczne wnioski, sprzeczności z kanonem i z tym, co postać może wiedzieć, oraz niespełnione wymagania zadania (scena wyraźnie niepełna, typ zakończenia). Nie oceniasz stylu ani gramatyki. Zwracasz WYŁĄCZNIE JSON.`;
 A.factCheck = async () => {
   const p = S.project, sc = curScene(), present = sc.who || [];
   openSheet('Kontrola realiów', loader('Konsultant czyta scenę i sprawdza fakty…'));
   const e = sc.endingUsed ? ENDINGS[sc.endingUsed] : null;
-  const user = `${memoryBlock(p, sc, present)}\n\n# WYMAGANIA SCENY\nPlan: ${sc.plan || '—'}\nZamówiona długość: ok. ${sc.words} słów (jest ${wc(sc.text)}).\n${e ? `Zamówione zakończenie (${e.label}): ${e.ins}` : ''}\n\n# SCENA\n${sc.text}\n\nZwróć JSON: {"issues":[{"quote":"dokładny cytat ze sceny (krótki)","problem":"co jest nie tak i dlaczego","fix":"jak to naprawić, konkretnie"}],"ending_ok":true,"ending_note":"czy zakończenie spełnia wymaganie; jeśli nie, dlaczego"}. Maksymalnie 8 najważniejszych problemów. Pusta lista, jeśli nie ma.`;
+  const user = `${memoryBlock(p, sc, present)}\n\n# WYMAGANIA SCENY\nPlan: ${sc.plan || '—'}\nCel długości: ok. ${sc.words} słów (jest ${wc(sc.text)}); zgłoś tylko, jeśli scena jest wyraźnie niepełna, a nie za samą liczbę słów.\n${e ? `Zamówione zakończenie (${e.label}): ${e.ins}` : ''}\n\n# SCENA\n${sc.text}\n\nZwróć JSON: {"issues":[{"quote":"dokładny cytat ze sceny (krótki)","problem":"co jest nie tak i dlaczego","fix":"jak to naprawić, konkretnie"}],"ending_ok":true,"ending_note":"czy zakończenie spełnia wymaganie; jeśli nie, dlaczego"}. Maksymalnie 8 najważniejszych problemów. Pusta lista, jeśli nie ma.`;
   let r;
   try { r = await llm('writer', [{ role: 'system', content: FACT_SYS }, { role: 'user', content: user }], { json: true, maxTokens: 6000, temp: 0.2 }); }
   catch (err) { setSheet(`<div class="banner bad">${esc(err.message)}</div>`); throw err; }
