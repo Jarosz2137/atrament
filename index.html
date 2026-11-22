@@ -527,10 +527,12 @@ function findChar(name) {
 const whoNames = ids => (ids || []).map(id => charById(id)?.name).filter(Boolean);
 
 /* ============================== Model (API) ============================== */
-function httpError(status, text) {
+function httpError(status, text, prov) {
+  const pname = (PROVIDERS[prov] || {}).name || 'dostawcy';
+  const billing = { gemini: ' W AI Studio: Projects → Billing, doładuj kredyty (Google wymaga przedpłaty).', openai: ' Doładuj na platform.openai.com → Billing.', anthropic: ' Doładuj w Console → Billing.', openrouter: ' Doładuj na openrouter.ai/credits.' }[prov] || '';
   let m = ''; try { const j = JSON.parse(text); m = j.error?.message || j.message || ''; } catch { m = (text || '').slice(0, 160); }
   const map = {
-    400: 'Model odrzucił zapytanie.', 401: 'Nieprawidłowy klucz API. Sprawdź go w Ustawieniach.', 402: 'Brak środków na koncie OpenRouter. Doładuj konto albo wybierz tańszy model.',
+    400: 'Model odrzucił zapytanie.', 401: 'Nieprawidłowy klucz API. Sprawdź go w Ustawieniach.', 402: 'Brak środków na koncie ' + pname + '.' + billing,
     403: 'Dostawca zablokował zapytanie (moderacja treści albo uprawnienia klucza).', 404: 'Nie znaleziono modelu albo żaden dostawca nie spełnia Twoich ustawień prywatności. Wyłącz ZDR albo zmień model.',
     408: 'Model nie odpowiedział na czas. Spróbuj ponownie.', 413: 'Za długi tekst dla tego modelu.', 429: 'Limit zapytań. Odczekaj chwilę albo zmień model.',
     500: 'Błąd po stronie dostawcy. Spróbuj ponownie.', 502: 'Dostawca modelu nie odpowiada. Spróbuj ponownie.', 503: 'Model jest teraz przeciążony po stronie dostawcy (to nie wina apki ani Twojego klucza). Spróbuj za minutę albo przełącz model.',
@@ -677,7 +679,7 @@ async function llmAnthropic(role, messages, opt) {
     if (res.status === 529 || res.status === 503) throw new UserError('Claude jest teraz przeciążony. Spróbuj za chwilę.');
     if (res.status === 401) throw new UserError('Nieprawidłowy klucz Claude API. Sprawdź go w Ustawieniach.');
     if (res.status === 400 && /credit|balance/i.test(t)) throw new UserError('Brak środków na koncie Claude API. Doładuj je w Console (Billing).');
-    throw httpError(res.status, t);
+    throw httpError(res.status, t, 'anthropic');
   }
   let text = '', inTok = 0, outTok = 0, cacheR = 0, cacheW = 0, finish = '';
   const takeUsage = u => { if (!u) return; if (u.input_tokens != null) inTok = u.input_tokens; if (u.output_tokens != null) outTok = u.output_tokens; if (u.cache_read_input_tokens != null) cacheR = u.cache_read_input_tokens; if (u.cache_creation_input_tokens != null) cacheW = u.cache_creation_input_tokens; };
@@ -820,7 +822,7 @@ async function llmRaw(role, messages, opt = {}) {
     await new Promise(r => setTimeout(r, wait));
     res = await send(body);
   }
-  if (!res.ok) throw httpError(res.status, await res.text().catch(() => ''));
+  if (!res.ok) throw httpError(res.status, await res.text().catch(() => ''), r.provider);
 
   let text = '', usage = null, finish = '';
   if (opt.stream && res.body) {
@@ -1444,7 +1446,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.0 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
