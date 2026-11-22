@@ -1283,7 +1283,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1501,12 +1501,17 @@ A.expand = async () => {
   const r = await streamInto(sc, msgs);
   if (r) { if (sc.gen) sc.gen.output = sc.text; toast(`Rozwinięto do ${fmtN(wc(sc.text))} słów.`); saveProject(); render(); }
 };
-const FACT_SYS = `Jesteś redaktorem merytorycznym powieści i konsultantem technicznym (motoryzacja, simracing, fizyka, realia polskie). Szukasz w scenie błędów merytorycznych i logicznych, które przeoczyłby czytelnik niezaznajomiony z tematem: pomieszane konteksty (gra a prawdziwe auto), złe lub brakujące jednostki, liczby nierealne w danym kontekście, zbyt kategoryczne wnioski, sprzeczności z kanonem i z tym, co postać może wiedzieć, oraz niespełnione wymagania zadania (scena wyraźnie niepełna, typ zakończenia). Nie oceniasz stylu ani gramatyki. Zwracasz WYŁĄCZNIE JSON.`;
+const FACT_SYS = `Jesteś redaktorem merytorycznym powieści i konsultantem technicznym (motoryzacja, simracing, fizyka, realia polskie). Czytasz scenę zdanie po zdaniu i szukasz:
+1. czynności fizycznie niemożliwych i sprzeczności w scenie (np. „gestykulował wolną ręką, nie zdejmując jej z kierownicy”; przedmiot odłożony, a potem trzymany w dłoni; postać, która wyszła, a nadal mówi w pokoju),
+2. błędów merytorycznych, które przeoczyłby laik: pomieszane konteksty (gra a prawdziwe auto), złe lub brakujące jednostki, nierealne liczby, zbyt kategoryczne wnioski,
+3. sprzeczności z kanonem i z tym, co postać może wiedzieć (pola WIE / NIE WIE),
+4. sceny wyraźnie niepełnej względem planu.
+Typ zakończenia oceniasz łagodnie: zgłaszasz go tylko wtedy, gdy zakończenie wyraźnie nie ma nic wspólnego z zamówionym typem. Najważniejsze są punkty 1–3: najpierw je sprawdź. Nie oceniasz stylu ani gramatyki. Zwracasz WYŁĄCZNIE JSON.`;
 A.factCheck = async () => {
   const p = S.project, sc = curScene(), present = sc.who || [];
   openSheet('Kontrola realiów', loader('Konsultant czyta scenę i sprawdza fakty…'));
   const e = sc.endingUsed ? ENDINGS[sc.endingUsed] : null;
-  const user = `${memoryBlock(p, sc, present)}\n\n# WYMAGANIA SCENY\nPlan: ${sc.plan || '—'}\nCel długości: ok. ${sc.words} słów (jest ${wc(sc.text)}); zgłoś tylko, jeśli scena jest wyraźnie niepełna, a nie za samą liczbę słów.\n${e ? `Zamówione zakończenie (${e.label}): ${e.ins}` : ''}\n\n# SCENA\n${sc.text}\n\nZwróć JSON: {"issues":[{"quote":"dokładny cytat ze sceny (krótki)","problem":"co jest nie tak i dlaczego","fix":"jak to naprawić, konkretnie"}],"ending_ok":true,"ending_note":"czy zakończenie spełnia wymaganie; jeśli nie, dlaczego"}. Maksymalnie 8 najważniejszych problemów. Pusta lista, jeśli nie ma.`;
+  const user = `${memoryBlock(p, sc, present)}\n\n# WYMAGANIA SCENY\nPlan: ${sc.plan || '—'}\nCel długości: ok. ${sc.words} słów (jest ${wc(sc.text)}); zgłoś tylko, jeśli scena jest wyraźnie niepełna, a nie za samą liczbę słów.\n${e ? `Zamówione zakończenie (${e.label}): ${e.ins}` : ''}\n\n# SCENA\n${sc.text}\n\nZwróć JSON: {"issues":[{"quote":"dokładny cytat ze sceny (krótki)","problem":"co jest nie tak i dlaczego","fix":"jak to naprawić, konkretnie"}],"ending_ok":true,"ending_note":"czy zakończenie spełnia wymaganie; jeśli nie, dlaczego"}. Maksymalnie 8 najważniejszych problemów, od najpoważniejszych. Pusta lista, jeśli nie ma. Przy ending_ok domyślnie true.`;
   let r;
   try { r = await llm('writer', [{ role: 'system', content: FACT_SYS }, { role: 'user', content: user }], { json: true, maxTokens: 6000, temp: 0.2 }); }
   catch (err) { setSheet(`<div class="banner bad">${esc(err.message)}</div>`); throw err; }
