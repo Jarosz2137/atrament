@@ -895,7 +895,6 @@ Zasady:
 function memoryBlock(p, sc, present) {
   const B = [];
   if (p.style.guide.trim()) B.push('## STYL I ŚWIAT\n' + p.style.guide.trim());
-  if (isSimStory(p)) B.push('## ' + SIM_GLOSSARY);
   if ((p.style.facts || '').trim()) B.push('## REALIA I FAKTY TECHNICZNE (twarde fakty: trzymaj się ich dokładnie; gdy czegoś nie wiesz na pewno, nie podawaj konkretnych liczb)\n' + p.style.facts.trim());
   if (p.style.sample.trim()) B.push('## PRÓBKA STYLU AUTORA (naśladuj rytm i słownictwo; nie kopiuj treści, obrazów ani pierwszego zdania)\n' + p.style.sample.trim().slice(0, 7000));
   const pres = present.map(charById).filter(Boolean);
@@ -1217,8 +1216,9 @@ function viewStyle() {
     <label class="field"><span>Wytyczne stylu i świata</span><textarea class="auto" id="styleGuide" data-f="style.guide" placeholder="Narrator, czas, POV, ton, gatunek, realia, czego unikać.">${esc(p.style.guide)}</textarea></label>
   </div>
   <div class="card">
-    <label class="field"><span>Realia i fakty techniczne</span><textarea class="auto" id="styleFacts" data-f="style.facts" placeholder="Np.: Setup w simracingu (GT3, Spa) nie przenosi się 1:1 na drogowe M4. Ciśnienia w grze podawane na gorąco w PSI (GT3: ok. 26–27,5 PSI), w drogowym aucie na zimno w barach (ok. 2,2–2,6). Kacper ma M4 F82, seryjne zawieszenie.">${esc(p.style.facts || '')}</textarea></label>
-    <span class="hint">Twarde fakty, których model ma się trzymać. Kontrola realiów też z nich korzysta.</span>
+    <label class="field"><span>Realia i fakty techniczne</span><textarea class="auto" id="styleFacts" data-f="style.facts" placeholder="Np.: realia zawodu bohatera, sprzęt, którego używa, jak działają procedury, czego w tym świecie nie da się zrobić. Możesz też wygenerować ściągę przyciskiem poniżej.">${esc(p.style.facts || '')}</textarea></label>
+    <span class="hint">Twarde fakty, których model ma się trzymać: sprzęt, terminologia, procedury, realia miejsca i epoki. Kontrola realiów też z nich korzysta, a gdy znajdzie błąd, możesz jednym stuknięciem dopisać tu zasadę.</span>
+    <button class="btn" data-a="genFacts">Wygeneruj ściągę realiów z opowieści</button>
   </div>
   <div class="card">
     <label class="field"><span>Próbka Twojej prozy</span><textarea class="auto" id="styleSample" data-f="style.sample" placeholder="Wklej 1–3 strony swojego tekstu. Model naśladuje rytm i słownictwo, nie treść.">${esc(p.style.sample)}</textarea></label>
@@ -1309,7 +1309,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.9 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.8 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1550,28 +1550,18 @@ A.expand = async () => {
   const r = await streamInto(sc, msgs);
   if (r) { if (sc.gen) sc.gen.output = sc.text; toast(`Rozwinięto do ${fmtN(wc(sc.text))} słów.`); saveProject(); render(); }
 };
-// Wbudowana ściąga simracingowa: trafia do pisarza i do kontroli realiów, gdy opowieść jest o simracingu.
-const SIM_GLOSSARY = `ŚCIĄGA: SPRZĘT I REALIA SIMRACINGU (fakty, trzymaj się ich)
-- Baza kierownicy (wheelbase, np. direct drive) to silnik przykręcony do stanowiska. Ręce trzyma się na kierownicy (wieńcu) zamocowanej na bazie, nie „na bazie”.
-- Pedały to osobny zestaw (pedalset); hamulec często z czujnikiem nacisku (load cell). Stanowisko to kokpit/rig z fotelem albo biurko z mocowaniem.
-- Telemetria pochodzi z gry: zapisuje ją gra albo program (np. MoTeC, Garage 61) podczas jazdy. Z nagrania wideo czy streama NIE da się pobrać telemetrii; można najwyżej odczytać to, co widać na ekranie (czas okrążenia, prędkość, bieg z HUD).
-- Z cudzego streama nie widać ustawień setupu, chyba że streamer je pokaże.
-- Setup to plik ustawień auta w grze: ciśnienia opon (w grze zwykle na gorąco, PSI), pochylenie kół (camber), zbieżność (toe), sprężyny, amortyzatory (dobicie/odbicie, bump/rebound), stabilizatory, wysokość, skrzydło (docisk), balans hamulców, w GT3 także ABS i kontrola trakcji.
-- Okrążenie Spa w GT3 w symulatorze to ok. 2:17–2:20.
-- Świat gry i prawdziwe auto to osobne rzeczy: setup z gry nie przenosi się na drogowy samochód.`;
-const isSimStory = p => /simrac|setup|gt3|telemetr|kierownic|spa[- ]/i.test([p.style.guide, p.style.facts, p.title, ...p.characters.map(c => c.description + ' ' + c.role)].join(' '));
 const FACT_SYS = `Jesteś redaktorem merytorycznym powieści i konsultantem technicznym (motoryzacja, simracing, fizyka, realia polskie). Czytasz scenę zdanie po zdaniu i szukasz:
 1. czynności fizycznie niemożliwych i sprzeczności w scenie (np. „gestykulował wolną ręką, nie zdejmując jej z kierownicy”; przedmiot odłożony, a potem trzymany w dłoni; postać, która wyszła, a nadal mówi w pokoju),
 2. błędów merytorycznych, które przeoczyłby laik: pomieszane konteksty (gra a prawdziwe auto), złe lub brakujące jednostki, nierealne liczby, zbyt kategoryczne wnioski,
 3. sprzeczności z kanonem i z tym, co postać może wiedzieć (pola WIE / NIE WIE),
-4. błędnego użycia sprzętu i terminów fachowych (np. „położył dłonie na bazie kierownicy” zamiast na kierownicy; „wykresy telemetrii pobrane z wideo”, choć telemetria pochodzi z gry): sprawdź każdy termin techniczny ze ściągą,
+4. błędnego użycia sprzętu, narzędzi i terminów fachowych z dziedziny, o której jest scena (np. przedmiot używany niezgodnie z przeznaczeniem, dane pozyskane w niemożliwy sposób): sprawdź każdy termin fachowy z sekcją REALIA i z własną wiedzą,
 5. sceny wyraźnie niepełnej względem planu.
 Typ zakończenia oceniasz łagodnie: zgłaszasz go tylko wtedy, gdy zakończenie wyraźnie nie ma nic wspólnego z zamówionym typem. Najważniejsze są punkty 1–4: najpierw je sprawdź. Nie oceniasz stylu ani gramatyki. Zwracasz WYŁĄCZNIE JSON.`;
 A.factCheck = async () => {
   const p = S.project, sc = curScene(), present = sc.who || [];
   openSheet('Kontrola realiów', loader('Konsultant czyta scenę i sprawdza fakty…'));
   const e = sc.endingUsed ? ENDINGS[sc.endingUsed] : null;
-  const user = `${memoryBlock(p, sc, present)}\n\n# WYMAGANIA SCENY\nPlan: ${sc.plan || '—'}\nCel długości: ok. ${sc.words} słów (jest ${wc(sc.text)}); zgłoś tylko, jeśli scena jest wyraźnie niepełna, a nie za samą liczbę słów.\n${e ? `Zamówione zakończenie (${e.label}): ${e.ins}` : ''}\n\n# SCENA\n${sc.text}\n\nZwróć JSON: {"issues":[{"quote":"dokładny cytat ze sceny (krótki)","problem":"co jest nie tak i dlaczego","fix":"jak to naprawić, konkretnie"}],"ending_ok":true,"ending_note":"czy zakończenie spełnia wymaganie; jeśli nie, dlaczego"}. Maksymalnie 8 najważniejszych problemów, od najpoważniejszych. Pusta lista, jeśli nie ma. Przy ending_ok domyślnie true.`;
+  const user = `${memoryBlock(p, sc, present)}\n\n# WYMAGANIA SCENY\nPlan: ${sc.plan || '—'}\nCel długości: ok. ${sc.words} słów (jest ${wc(sc.text)}); zgłoś tylko, jeśli scena jest wyraźnie niepełna, a nie za samą liczbę słów.\n${e ? `Zamówione zakończenie (${e.label}): ${e.ins}` : ''}\n\n# SCENA\n${sc.text}\n\nZwróć JSON: {"issues":[{"quote":"dokładny cytat ze sceny (krótki)","problem":"co jest nie tak i dlaczego","fix":"jak to naprawić, konkretnie","rule":"ogólna zasada na przyszłość, jedno zdanie, żeby ten typ błędu się nie powtórzył (np. fakt o sprzęcie albo realiach)"}],"ending_ok":true,"ending_note":"czy zakończenie spełnia wymaganie; jeśli nie, dlaczego"}. Maksymalnie 8 najważniejszych problemów, od najpoważniejszych. Pusta lista, jeśli nie ma. Przy ending_ok domyślnie true.`;
   let r;
   try { r = await llm('writer', [{ role: 'system', content: FACT_SYS }, { role: 'user', content: user }], { json: true, maxTokens: 6000, temp: 0.2 }); }
   catch (err) { setSheet(`<div class="banner bad">${esc(err.message)}</div>`); throw err; }
@@ -1581,9 +1571,37 @@ A.factCheck = async () => {
   S.ui = { issues, endingOk: d.ending_ok !== false, endingNote: String(d.ending_note || '') };
   const endBox = !S.ui.endingOk ? `<div class="banner warn"><div><b>Zakończenie nie spełnia wymagania.</b> ${esc(S.ui.endingNote)}</div><div><button class="btn sm" data-a="endings">Daj 3 inne zakończenia</button></div></div>` : '';
   if (!issues.length) return setSheet(endBox + `<div class="banner info">Nie znalazłem błędów merytorycznych.</div><span class="hint mono">${esc(usageLine(r.usage))}</span>`);
-  setSheet(`${endBox}<div class="card">${issues.map((i, k) => `<label class="xitem"><input type="checkbox" data-fx="${k}" checked><span class="x">${i.quote ? `<i>„${esc(i.quote)}”</i><br>` : ''}<b>${esc(i.problem)}</b>${i.fix ? `<br><span class="muted small">Poprawka: ${esc(i.fix)}</span>` : ''}</span></label>`).join('')}</div>
+  setSheet(`${endBox}<div class="card">${issues.map((i, k) => `<label class="xitem"><input type="checkbox" data-fx="${k}" checked><span class="x">${i.quote ? `<i>„${esc(i.quote)}”</i><br>` : ''}<b>${esc(i.problem)}</b>${i.fix ? `<br><span class="muted small">Poprawka: ${esc(i.fix)}</span>` : ''}${i.rule ? `<br><button class="btn sm ghost" data-a="learnRule" data-id="${k}">Zapamiętaj w Realiach: „${esc(i.rule)}”</button>` : ''}</span></label>`).join('')}</div>
     <span class="hint mono">${esc(usageLine(r.usage))}</span>
     <div class="sheet-foot"><button class="btn" data-a="closeSheet">Zamknij</button><button class="btn primary" data-a="applyFacts">Popraw zaznaczone</button></div>`);
+};
+A.learnRule = (k, b) => {
+  const i = S.ui.issues?.[Number(k)]; if (!i?.rule) return;
+  const p = S.project, line = '- ' + i.rule.trim();
+  if (!(p.style.facts || '').includes(i.rule.trim())) p.style.facts = ((p.style.facts || '').trim() + '\n' + line).trim();
+  saveProject(); b.disabled = true; b.textContent = 'Zapamiętane w Realiach'; 
+};
+A.genFacts = async (id, b) => {
+  const p = S.project;
+  const scenes = p.chapters.flatMap(c => c.scenes).filter(x => x.text.trim());
+  const sample = scenes.slice(-3).map(x => x.text.slice(0, 2500)).join('\n\n---\n\n');
+  const sums = p.chapters.map(c => c.summary || c.scenes.map(x => x.summary).filter(Boolean).join(' ')).filter(Boolean).join('\n');
+  if (!p.style.guide.trim() && !sample && !p.characters.length) return toast('Najpierw dodaj wytyczne, postacie albo pierwszą scenę, żebym wiedział, o czym jest opowieść.', true);
+  openSheet('Ściąga realiów', loader('Sprawdzam, jakich dziedzin dotyczy opowieść, i spisuję fakty…'));
+  const user = `TYTUŁ: ${p.title}\nWYTYCZNE: ${p.style.guide || '—'}\nPOSTACIE:\n${p.characters.map(c => `- ${c.name}: ${c.role} ${c.description}`).join('\n') || '—'}\nSTRESZCZENIA:\n${sums || '—'}\nFRAGMENTY:\n${sample || '—'}\nOBECNE REALIA:\n${p.style.facts || '—'}\n\nUstal, jakich dziedzin wiedzy dotyczy ta opowieść (zawody, sprzęt, technologie, miejsca, epoka, procedury). Dla każdej spisz 5–12 konkretnych, sprawdzonych faktów i typowych błędów, które popełnia autor bez wiedzy fachowej: jak naprawdę działa sprzęt i jak się go używa, poprawna terminologia, jednostki, realne liczby, czego nie da się zrobić. Pisz po polsku, krótko, jedna rzecz w linii, w formacie:\n## Dziedzina\n- fakt\nNie powtarzaj OBECNYCH REALIÓW. Jeśli czegoś nie jesteś pewien, pomiń to. Zwróć tylko listę.`;
+  let r;
+  try { r = await llm('writer', [{ role: 'system', content: 'Jesteś konsultantem merytorycznym pisarzy: ekspertem, który zna realia wielu zawodów i dziedzin. Podajesz tylko fakty, których jesteś pewien.' }, { role: 'user', content: user }], { temp: 0.2, maxTokens: 4000 }); }
+  catch (e) { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; }
+  const txt = (r.text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```\w*|```/g, '').replace(/\*\*/g, '').trim();
+  setSheet(`<span class="hint">Przejrzyj i popraw, zanim dodasz. Model może się mylić, a Ty znasz swój świat najlepiej.</span>
+    <textarea class="auto" id="genFactsText" style="min-height:40vh">${esc(txt)}</textarea>
+    <span class="hint mono">${esc(usageLine(r.usage))}</span>
+    <div class="sheet-foot"><button class="btn" data-a="closeSheet">Anuluj</button><button class="btn primary" data-a="saveGenFacts">Dodaj do Realiów</button></div>`);
+};
+A.saveGenFacts = () => {
+  const t = $('#genFactsText').value.trim(); if (!t) return closeSheet();
+  const p = S.project; p.style.facts = ((p.style.facts || '').trim() + '\n\n' + t).trim();
+  saveProject(); closeSheet(); render(); toast('Dodano do Realiów.');
 };
 A.applyFacts = async () => {
   const p = S.project, sc = curScene(), orig = sc.text;
