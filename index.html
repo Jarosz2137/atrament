@@ -1287,7 +1287,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1700,7 +1700,7 @@ A.editorPass = async () => {
     fixed = fixed.slice(0, x.off) + x.rep[0] + fixed.slice(x.off + x.len); lastStart = x.off;
     applied.push({ find: x.bad, replace: x.rep[0], why: 'LanguageTool: ' + x.msg });
   }
-  for (const x of lt) if (!x.rep.length && !isProtected(x)) ltNotes.push(`„${x.ctx}”: ${x.msg}`);
+  for (const x of lt) if (!x.rep.length && !isProtected(x)) ltNotes.push(x);
   // 2) poprawki redaktora
   for (const f of results.flat()) {
     if (!f || typeof f.find !== 'string' || typeof f.replace !== 'string' || !f.find.trim() || f.find === f.replace) continue;
@@ -1710,7 +1710,7 @@ A.editorPass = async () => {
   const segs = diffHunks(orig, fixed), n = segs.filter(x => x.eq == null).length;
   S.ui = { segs, orig };
   const ltInfo = !S.settings.lt ? 'wyłączony' : S.ltFailed ? 'niedostępny' : lt.length + ' uwag';
-  const ltNotesHtml = ltNotes.length ? `<details class="card"><summary class="label" style="cursor:pointer">Uwagi LanguageTool bez gotowej poprawki (${ltNotes.length})</summary><div class="stack small" style="margin-top:8px">${ltNotes.map(x => '<div>' + esc(x) + '</div>').join('')}</div></details>` : '';
+  const ltNotesHtml = ltNotes.length ? `<details class="card"><summary class="label" style="cursor:pointer">Uwagi LanguageTool bez gotowej poprawki (${ltNotes.length})</summary><div class="stack small" style="margin-top:8px">${ltNotes.map(x => `<div><b>${esc(x.bad)}</b>: ${esc(x.msg)} <span class="muted">(…${esc(x.ctx)}…)</span></div>`).join('')}</div></details>` : '';
   const foot = `${ltNotesHtml}${failed ? `<div class="banner warn small">Redaktor nie sprawdził ${failed} z ${chunks.length} fragmentów: ${esc(lastErr?.message || '')}</div>` : ''}<span class="hint mono">${esc(usageLine(usage))} · fragmentów: ${chunks.length}${failed ? ` (nieudanych: ${failed})` : ''} · ciągłość całej sceny: ${cont.failed ? 'nie udała się' : 'sprawdzona'} · LanguageTool: ${ltInfo}</span>`;
   if (!n) return setSheet(`${notesHtml}<div class="banner info">Redaktor nie znalazł nic do poprawy.</div>${missed.length ? `<div class="banner warn small">Redaktor zgłosił ${missed.length} uwag, ale nie dało się ich dopasować do tekstu: ${missed.map(m => esc('„' + m.find + '” → „' + m.replace + '”')).join('; ')}</div>` : ''}${foot}`);
   setSheet(`${notesHtml}<div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
