@@ -569,7 +569,7 @@ const ENGINES = {
   gemini: { label: 'Gemini', prov: 'gemini', editor: ['gemini-3.8-flash'], memory: ['gemini-3.1-flash-lite'], cheapEditor: ['gemini-3.1-flash-lite'],
     models: [
       { id: 'flash', name: 'Gemini 3.8 Flash', m: ['gemini-3.8-flash'], c: '~1,3 centa', d: 'Dobry i tani' },
-      { id: 'argon', name: 'Gemini 4 Argon', m: ['gemini-4-argon'], c: '~3,5 centa', d: 'Wymaga billingu' },
+      { id: 'argon', name: 'Gemini 4 Argon', m: ['gemini-4-argon'], c: '~3,5 centa', d: 'Na razie tylko dla partnerów Google' },
       { id: 'lite', name: 'Flash-Lite', m: ['gemini-3.1-flash-lite'], c: '~0,5 centa', d: 'Działa na darmowym kluczu', cheap: true },
     ], note: 'Na kluczu bez billingu Google trenuje na Twoich tekstach.' },
   kimi: { label: 'Kimi', prov: 'moonshot', editor: ['kimi-k3'], memory: ['kimi-k3'],
@@ -1380,7 +1380,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.10 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.11 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
