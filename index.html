@@ -563,7 +563,8 @@ const ENGINES = {
   openai: { label: 'ChatGPT', prov: 'openai', editor: ['gpt-6-luna', 'gpt-6-mini'], memory: ['gpt-6-luna', 'gpt-5.4-nano'], cheapEditor: ['gpt-6-luna', 'gpt-6-mini'],
     models: [
       { id: 'astra', name: 'GPT-6 Astra', m: ['gpt-6-astra', 'gpt-6'], c: '~17 centów', d: 'Flagowiec, drogi' },
-      { id: 'luna', name: 'GPT-6 Luna', m: ['gpt-6-luna', 'gpt-6-mini'], c: '~0,2 centa', d: 'Szybki i tani', cheap: true },
+      { id: 'sol', name: 'GPT-6 Sol', m: ['gpt-6-sol'], c: '~3,5 centa', d: 'Rozsądny do prozy' },
+      { id: 'luna', name: 'GPT-6 Luna', m: ['gpt-6-luna', 'gpt-6-mini'], c: '~0,2 centa', d: 'Tani, słabszy w prozie', cheap: true },
     ], note: 'Apka sama dobiera dokładne nazwy modeli z Twojego konta OpenAI.' },
   gemini: { label: 'Gemini', prov: 'gemini', editor: ['gemini-3.8-flash'], memory: ['gemini-3.1-flash-lite'], cheapEditor: ['gemini-3.1-flash-lite'],
     models: [
@@ -1379,7 +1380,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.9 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.10 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
