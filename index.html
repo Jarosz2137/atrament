@@ -784,7 +784,7 @@ async function languageTool(text) {
   if (!r.ok) throw new Error('LT ' + r.status);
   const j = await r.json();
   return (j.matches || []).map(m => ({
-    bad: text.substr(m.offset, m.length),
+    off: m.offset, len: m.length, bad: text.substr(m.offset, m.length), rule: m.rule?.issueType || '',
     ctx: text.slice(Math.max(0, m.offset - 25), m.offset + m.length + 25).replace(/\s+/g, ' '),
     msg: m.message, rep: (m.replacements || []).slice(0, 3).map(x => x.value),
   }));
@@ -1283,7 +1283,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1648,7 +1648,7 @@ A.editorPass = async () => {
   const continuity = llm('editor', [{ role: 'system', content: CONTINUITY_SYS }, { role: 'user', content: 'SCENA:\n\n' + orig }], { json: true, temp: 0.1, maxTokens: 6000 })
     .then(r => { if (r.usage) { usage.prompt_tokens += r.usage.prompt_tokens || 0; usage.completion_tokens += r.usage.completion_tokens || 0; usage.cost += r.usage.cost || 0; } const d = parseJSON(r.text) || {}; return { fixes: (Array.isArray(d.fixes) ? d.fixes : []).map(f => ({ ...f, why: 'ciągłość: ' + (f?.why || '') })), notes: (Array.isArray(d.notes) ? d.notes : []).map(String).filter(x => x.trim()) }; })
     .catch(() => ({ fixes: [], notes: [], failed: true }));
-  const results = await Promise.all(chunks.map(async ch => {
+  const runChunk = async ch => {
     const hints = lt.filter(x => ch.includes(x.bad)).slice(0, 30).map(x => `- „${x.ctx}”: ${x.msg}${x.rep.length ? ' → ' + x.rep.join(' / ') : ''}`).join('\n');
     const user = (hints ? `Automatyczny korektor (LanguageTool) zgłosił możliwe problemy. Część może być fałszywa, oceń sam:\n${hints}\n\n` : '') + 'FRAGMENT:\n\n' + ch;
     try {
@@ -1656,14 +1656,33 @@ A.editorPass = async () => {
       if (r.usage) { usage.prompt_tokens += r.usage.prompt_tokens || 0; usage.completion_tokens += r.usage.completion_tokens || 0; usage.cost += r.usage.cost || 0; }
       const d = parseJSON(r.text);
       return Array.isArray(d?.fixes) ? d.fixes : [];
-    } catch (e) { failed++; lastErr = e; return []; }
-  }));
+    } catch (e) { throw e; }
+  };
+  // kawałki po kolei (darmowe klucze mają limity na minutę), z jedną ponowną próbą
+  const results = [];
+  for (const ch of chunks) {
+    try { results.push(await runChunk(ch)); }
+    catch (e) {
+      await new Promise(r => setTimeout(r, 2500));
+      try { results.push(await runChunk(ch)); } catch (e2) { failed++; lastErr = e2; results.push([]); }
+    }
+  }
   const cont = await continuity;
   if (failed === chunks.length && cont.failed) { setSheet(`<div class="banner bad">${esc(lastErr?.message || 'Redaktor nie odpowiedział.')}</div>`); return; }
   results.push(cont.fixes);
   const notesHtml = cont.notes.length ? `<div class="banner warn"><b>Ciągłość do sprawdzenia ręcznie</b>${cont.notes.map(x => '<div class="small">• ' + esc(x) + '</div>').join('')}</div>` : '';
   // naniesienie poprawek: każdą w pierwszym miejscu, gdzie pasuje dokładnie
-  let fixed = orig; const applied = [], missed = [];
+  // 1) poprawki LanguageTool z gotową zamianą: nanoszone wprost (każdą można odrzucić w podglądzie)
+  let fixed = orig; const applied = [], missed = [], ltNotes = [];
+  const ltFix = lt.filter(x => x.rep.length && x.rep[0] !== x.bad && x.rule !== 'style' && x.rule !== 'whitespace').sort((a, b) => b.off - a.off);
+  let lastStart = Infinity;
+  for (const x of ltFix) {
+    if (x.off + x.len > lastStart) continue; // nakładające się zgłoszenia
+    fixed = fixed.slice(0, x.off) + x.rep[0] + fixed.slice(x.off + x.len); lastStart = x.off;
+    applied.push({ find: x.bad, replace: x.rep[0], why: 'LanguageTool: ' + x.msg });
+  }
+  for (const x of lt) if (!x.rep.length) ltNotes.push(`„${x.ctx}”: ${x.msg}`);
+  // 2) poprawki redaktora
   for (const f of results.flat()) {
     if (!f || typeof f.find !== 'string' || typeof f.replace !== 'string' || !f.find.trim() || f.find === f.replace) continue;
     if (fixed.includes(f.find)) { fixed = fixed.replace(f.find, f.replace); applied.push(f); }
@@ -1672,7 +1691,8 @@ A.editorPass = async () => {
   const segs = diffHunks(orig, fixed), n = segs.filter(x => x.eq == null).length;
   S.ui = { segs, orig };
   const ltInfo = !S.settings.lt ? 'wyłączony' : S.ltFailed ? 'niedostępny' : lt.length + ' uwag';
-  const foot = `<span class="hint mono">${esc(usageLine(usage))} · fragmentów: ${chunks.length}${failed ? ` (nieudanych: ${failed})` : ''} · ciągłość całej sceny: ${cont.failed ? 'nie udała się' : 'sprawdzona'} · LanguageTool: ${ltInfo}</span>`;
+  const ltNotesHtml = ltNotes.length ? `<details class="card"><summary class="label" style="cursor:pointer">Uwagi LanguageTool bez gotowej poprawki (${ltNotes.length})</summary><div class="stack small" style="margin-top:8px">${ltNotes.map(x => '<div>' + esc(x) + '</div>').join('')}</div></details>` : '';
+  const foot = `${ltNotesHtml}${failed ? `<div class="banner warn small">Redaktor nie sprawdził ${failed} z ${chunks.length} fragmentów: ${esc(lastErr?.message || '')}</div>` : ''}<span class="hint mono">${esc(usageLine(usage))} · fragmentów: ${chunks.length}${failed ? ` (nieudanych: ${failed})` : ''} · ciągłość całej sceny: ${cont.failed ? 'nie udała się' : 'sprawdzona'} · LanguageTool: ${ltInfo}</span>`;
   if (!n) return setSheet(`${notesHtml}<div class="banner info">Redaktor nie znalazł nic do poprawy.</div>${missed.length ? `<div class="banner warn small">Redaktor zgłosił ${missed.length} uwag, ale nie dało się ich dopasować do tekstu: ${missed.map(m => esc('„' + m.find + '” → „' + m.replace + '”')).join('; ')}</div>` : ''}${foot}`);
   setSheet(`${notesHtml}<div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
     <div class="diff" id="diffBox">${diffHtml()}</div>
