@@ -209,6 +209,10 @@ details.plan:not([open]) > summary::after { content: "Rozwiń"; }
 
 /* Arkusz (bottom sheet) */
 #sheet { position: fixed; inset: 0 0 calc(-1 * var(--vfix, 0px)); z-index: 50; }
+#manual { position: fixed; inset: 0; z-index: 70; }
+#manual .sheet-panel { max-height: 92vh; }
+#manual textarea { width: 100%; min-height: 120px; }
+#manual .mprompt { max-height: 22vh; overflow: auto; font-size: 12px; white-space: pre-wrap; opacity: .75; }
 .sheet-bg { position: absolute; inset: 0; background: rgb(5 8 14 / .5); }
 .sheet-panel {
   position: absolute; left: 0; right: 0; bottom: 0; max-height: calc(100% - env(safe-area-inset-top, 0px) - 24px);
@@ -330,6 +334,7 @@ a { color: var(--accent); }
 </div></nav>
 
 <div id="sheet" hidden></div>
+<div id="manual" hidden></div>
 <div id="toast" hidden role="status" aria-live="polite"></div>
 <div id="print" aria-hidden="true"></div>
 <input type="file" id="fileIn" accept="application/json,.json" hidden>
@@ -549,10 +554,18 @@ const PROVIDERS = {
   moonshot: { name: 'Kimi API (Moonshot)', base: 'https://api.moonshot.ai/v1', keyField: 'msKey', ph: 'sk-…', keyUrl: 'https://platform.moonshot.ai', privacy: 'Regulamin pozwala im używać treści z API do ulepszania usług.' },
   openrouter: { name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', keyField: 'orKey', ph: 'sk-or-…', keyUrl: 'https://openrouter.ai/keys', privacy: 'Pośrednik do setek modeli, także darmowych.' },
   custom: { name: 'Własny endpoint', keyField: 'customKey' },
+  manual: { name: 'Ręcznie przez czat (subskrypcja)', manual: true },
 };
+const MANUAL_SITES = { claude: { name: 'Claude', url: 'https://claude.ai/new' }, chatgpt: { name: 'ChatGPT', url: 'https://chatgpt.com/' }, gemini: { name: 'Gemini', url: 'https://gemini.google.com/app' } };
 // Każdy dostawca: lista modeli pisarza (chipy) + redaktor i archiwista dobierani automatycznie.
 // m: kandydaci ID (pierwszy pasujący z listy dostawcy wygrywa), c: koszt sceny (~10k wejścia, ~1,5k wyjścia)
 const ENGINES = {
+  manual: { label: 'Czat (bez API)', prov: 'manual', editor: ['manual'], memory: ['manual'],
+    models: [
+      { id: 'claude', name: 'Claude', m: ['claude'], c: '0 zł', d: 'Z Twojej subskrypcji' },
+      { id: 'chatgpt', name: 'ChatGPT', m: ['chatgpt'], c: '0 zł', d: 'Z Twojej subskrypcji' },
+      { id: 'gemini', name: 'Gemini', m: ['gemini'], c: '0 zł', d: 'Z Twojej subskrypcji' },
+    ], note: 'Atrament składa prompt z pamięci opowieści, Ty wklejasz go w czacie i odsyłasz odpowiedź. Bez kluczy i bez opłat, ale każde zadanie (scena, redakcja, pamięć) to jedno kopiuj-wklej. Pamięć i redakcję możesz zostawić na tanim API, jeśli masz klucz.' },
   claude: { label: 'Claude', prov: 'anthropic', editor: ['claude-sonnet-5-5'], memory: ['claude-haiku-5-5'], cheapEditor: ['claude-haiku-5-5'],
     models: [
       { id: 'sonnet', name: 'Sonnet 5.5', m: ['claude-sonnet-5-5'], c: '~3,5 centa', d: 'Najlepszy stosunek jakości do ceny' },
@@ -600,6 +613,10 @@ async function applyEngine() {
   const st = S.settings, E = ENGINES[st.engine] || ENGINES.claude, M = curEngineModel();
   const slots = [M.m, M.free ? E.freeEditor : (M.cheap && E.cheapEditor) || E.editor, M.free ? E.freeEditor : E.memory];
   ['writer', 'editor', 'memory'].forEach((role, i) => { st.roles[role].provider = E.prov; st.roles[role].model = slots[i][0]; });
+  if (E.prov === 'manual' && st.manualHelpers && st.manualHelpers !== 'manual') {
+    const H = { claude: ['anthropic', 'claude-haiku-5-5'], openai: ['openai', 'gpt-6-luna'], gemini: ['gemini', 'gemini-3.1-flash-lite'] }[st.manualHelpers];
+    if (H) ['editor', 'memory'].forEach(role => { st.roles[role].provider = H[0]; st.roles[role].model = H[1]; });
+  }
   if (E.prov === 'openrouter') st.denyTraining = !M.free;
   saveSettings(); render();
   if (E.prov === 'openai' || E.prov === 'gemini') {
@@ -696,7 +713,7 @@ async function llm(role, messages, opt = {}) {
   try { return await llmRaw(role, messages, opt); }
   catch (e) {
     const st = S.settings, r = st.roles[role], w = st.roles.writer;
-    const fallbackable = [400, 402, 403, 404, 429].includes(e.status) || /Brak klucza|Nie wybrano modelu/.test(e.message || '');
+    const fallbackable = ([400, 402, 403, 404, 429].includes(e.status) || /Brak klucza|Nie wybrano modelu/.test(e.message || '')) && st.roles.writer.provider !== 'manual';
     if (role === 'writer' || e.name === 'AbortError' || !fallbackable || (r.provider === w.provider && r.model === w.model)) throw e;
     const saved = { ...r };
     Object.assign(r, { provider: w.provider, model: w.model });
@@ -708,8 +725,53 @@ async function llm(role, messages, opt = {}) {
     } catch (e2) { Object.assign(r, saved); throw e; }
   }
 }
+/* ============================== Tryb ręczny: kopiuj-wklej przez czat ============================== */
+const isManual = role => S.settings.roles[role]?.provider === 'manual';
+let MANUAL_Q = Promise.resolve(), MANUAL = null;
+function manualPrompt(role, messages, opt) {
+  const sys = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
+  const rest = messages.filter(m => m.role !== 'system').map(m => m.content).join('\n\n');
+  const tail = opt.json
+    ? '\n\n---\nODPOWIEDZ WYŁĄCZNIE poprawnym JSON-em (jeden obiekt), bez komentarzy i bez bloku kodu.'
+    : '\n\n---\nOdpowiedz samym tekstem, o który proszę: bez wstępu, bez komentarzy, bez nagłówków i bez formatowania markdown.';
+  return (sys ? '# INSTRUKCJE\n' + sys + '\n\n' : '') + rest + tail;
+}
+function manualAsk(role, messages, opt = {}) {
+  const run = () => new Promise((resolve, reject) => {
+    const prompt = manualPrompt(role, messages, opt);
+    const site = MANUAL_SITES[S.settings.pick?.manual] || MANUAL_SITES.claude;
+    const el = $('#manual');
+    const done = (err, text) => {
+      el.hidden = true; el.innerHTML = ''; MANUAL = null;
+      if (!$('#sheet') || $('#sheet').hidden) document.body.classList.remove('noscroll');
+      opt.signal?.removeEventListener?.('abort', onAbort);
+      if (err) reject(err); else resolve({ text, usage: null, finish: 'stop' });
+    };
+    const abortErr = () => { const e = new Error('Anulowano.'); e.name = 'AbortError'; return e; };
+    const onAbort = () => done(abortErr());
+    if (opt.signal?.aborted) return done(abortErr());
+    opt.signal?.addEventListener?.('abort', onAbort);
+    MANUAL = { prompt, done, json: !!opt.json };
+    const kb = Math.round(prompt.length / 1000);
+    el.innerHTML = `<div class="sheet-bg"></div><div class="sheet-panel" role="dialog" aria-modal="true" aria-label="Ręcznie przez czat"><div class="sheet-head"><h2>${esc(ROLE_INFO[role].name)}: przez ${esc(site.name)}</h2><button class="icon-btn" data-a="manualCancel" aria-label="Anuluj">×</button></div>
+      <div class="sheet-body stack">
+        <span class="hint"><b>1.</b> Skopiuj prompt (${kb} tys. znaków). <b>2.</b> Wklej go w nowym czacie. <b>3.</b> Skopiuj całą odpowiedź i wklej ją niżej.${opt.json ? ' Ta odpowiedź ma być JSON-em.' : ''}</span>
+        <div class="row"><button class="btn primary grow" data-a="manualCopy">Kopiuj prompt</button><a class="btn grow" style="text-decoration:none" href="${site.url}" target="_blank" rel="noopener">Otwórz ${esc(site.name)}</a></div>
+        <details><summary class="hint">Podgląd promptu</summary><div class="mprompt mono" id="manualPromptView"></div></details>
+        <label class="field"><span>Odpowiedź z czatu</span><textarea id="manualAnswer" placeholder="Wklej tutaj odpowiedź…"></textarea></label>
+        <div class="row"><button class="btn grow" data-a="manualPaste">Wklej ze schowka</button><button class="btn primary grow" data-a="manualDone">Gotowe</button></div>
+      </div></div>`;
+    $('#manualPromptView').textContent = prompt;
+    el.hidden = false; document.body.classList.add('noscroll');
+  });
+  const p = MANUAL_Q.then(run, run);
+  MANUAL_Q = p.catch(() => {});
+  return p;
+}
+
 async function llmRaw(role, messages, opt = {}) {
   const st = S.settings, r = st.roles[role];
+  if (r.provider === 'manual') return manualAsk(role, messages, opt);
   if (r.provider === 'anthropic') return llmAnthropic(role, messages, opt);
   const P = PROVIDERS[r.provider] || PROVIDERS.custom;
   const isOR = r.provider === 'openrouter', isOA = r.provider === 'openai';
@@ -1198,7 +1260,7 @@ function viewScene(p, sc) {
       <label class="field grow"><span>Gdzie i kiedy (opcjonalnie)</span><input type="text" id="sceneWhere" data-f="scene.where" value="${esc(sc.where || '')}" placeholder="Np. dwa dni później, parking pod galerią"></label></div>
     <div class="row"><label class="field grow"><span>Zakończenie</span><select id="sceneEnding" data-f="scene.ending">${endOpts}</select></label>
       <label class="field grow"><span>Długość</span><select id="sceneWords" data-f="scene.words">${lenOpts}</select></label>
-      <label class="field grow"><span>Model</span><select id="engineQuick">${Object.entries(ENGINES).map(([k, e]) => `<optgroup label="${e.label}${S.settings[PROVIDERS[e.prov].keyField] ? '' : ' (brak klucza)'}">${e.models.map(m => `<option value="${k}:${m.id}" ${S.settings.engine === k && curEngineModel().id === m.id ? 'selected' : ''}>${esc(m.name)} · ${esc(m.c)}</option>`).join('')}</optgroup>`).join('')}</select></label></div>
+      <label class="field grow"><span>Model</span><select id="engineQuick">${Object.entries(ENGINES).map(([k, e]) => `<optgroup label="${e.label}${PROVIDERS[e.prov].manual || S.settings[PROVIDERS[e.prov].keyField] ? '' : ' (brak klucza)'}">${e.models.map(m => `<option value="${k}:${m.id}" ${S.settings.engine === k && curEngineModel().id === m.id ? 'selected' : ''}>${esc(m.name)} · ${esc(m.c)}</option>`).join('')}</optgroup>`).join('')}</select></label></div>
     <div class="row">
       <button class="btn primary grow" data-a="generate" ${busy ? 'disabled' : ''}>${hasText ? 'Napisz od nowa' : 'Napisz scenę'}</button>
       <button class="btn grow" data-a="ideas" ${busy ? 'disabled' : ''}>Pomysły</button>
@@ -1318,7 +1380,7 @@ function viewSettings() {
       <div class="row"><label class="field grow"><span>Dostawca</span><select id="prov_${role}" data-f="role_${role}.provider">
         ${Object.entries(PROVIDERS).map(([k, v]) => `<option value="${k}" ${r.provider === k ? 'selected' : ''}>${esc(k === 'custom' ? (st.customName || v.name) : v.name)}</option>`).join('')}</select></label></div>
       <label class="field"><span>Model</span><div class="row"><input class="grow mono" type="text" id="model_${role}" data-f="role_${role}.model" value="${esc(r.model)}" autocapitalize="off" autocorrect="off" spellcheck="false">
-        ${r.provider !== 'custom' ? `<button class="btn" data-a="pickModel" data-id="${role}">Wybierz</button>` : ''}</div></label>
+        ${r.provider !== 'custom' && r.provider !== 'manual' ? `<button class="btn" data-a="pickModel" data-id="${role}">Wybierz</button>` : ''}</div></label>
       <label class="field"><span>Temperatura: <b id="tv_${role}">${r.temp}</b></span><input type="range" id="temp_${role}" min="0" max="1.3" step="0.05" value="${r.temp}" data-f="role_${role}.temp"></label>
     </div>`;
   };
@@ -1332,14 +1394,16 @@ function viewSettings() {
     <div class="chips">${Object.entries(ENGINES).map(([k, e]) => `<button class="chip" data-a="setEngine" data-id="${k}" aria-pressed="${st.engine === k}">${e.label}</button>`).join('')}</div>
     <div class="label">Model pisarza</div>
     <div class="mchips">${E.models.map(m => `<button class="mchip" data-a="setPick" data-id="${m.id}" aria-pressed="${curEngineModel().id === m.id}"><b>${esc(m.name)}</b><span>${esc(m.c)} / scena</span><span>${esc(m.d)}</span></button>`).join('')}</div>
-    ${keyInput(E.prov)}
+    ${E.prov === 'manual' ? `<label class="field"><span>Redakcja i pamięć</span><select id="manualHelpers" data-f="settings.manualHelpers">
+      ${[['manual', 'Też ręcznie przez czat'], ['claude', 'Claude Haiku przez API (grosze)'], ['openai', 'GPT-6 Luna przez API (grosze)'], ['gemini', 'Gemini Flash-Lite przez API']].map(([v, l]) => `<option value="${v}" ${(st.manualHelpers || 'manual') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${st.manualHelpers && st.manualHelpers !== 'manual' ? keyInput({ claude: 'anthropic', openai: 'openai', gemini: 'gemini' }[st.manualHelpers]) : ''}` : keyInput(E.prov)}
     <div class="meta-line mono"><span>Pisze: ${esc(R.writer.model || '—')}</span><span>Redaguje: ${esc(R.editor.model || '—')}</span><span>Pamięć: ${esc(R.memory.model || '—')}</span></div>
     <span class="hint">${esc(E.note)}</span>
     <button class="btn" data-a="testConn">Sprawdź połączenie</button>
   </div>
   <details class="card adv"><summary><span class="label">Zaawansowane</span></summary><div class="stack" style="gap:14px;margin-top:12px">
     <span class="hint">Tu możesz dać każdej roli inny model, np. Kimi pisze, a Claude redaguje. Wybór modelu na górze nadpisze te ustawienia.</span>
-    <div class="card"><div class="label">Pozostałe klucze</div>${Object.keys(PROVIDERS).filter(k => k !== 'custom' && k !== E.prov).map(keyInput).join('')}</div>
+    <div class="card"><div class="label">Pozostałe klucze</div>${Object.keys(PROVIDERS).filter(k => k !== 'custom' && k !== 'manual' && k !== E.prov).map(keyInput).join('')}</div>
   <div class="card">
     <div class="label">Prywatność (tylko OpenRouter)</div>
     <label class="toggle"><span>Tylko dostawcy, którzy nie trenują na moich tekstach</span><input type="checkbox" id="deny" data-f="settings.denyTraining" ${st.denyTraining ? 'checked' : ''}></label>
@@ -1380,7 +1444,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.11 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.0 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1411,6 +1475,7 @@ document.addEventListener('input', e => {
   obj[key] = v;
   if (el.classList.contains('auto')) autosize(el);
   if (scope === 'settings' || scope.startsWith('role_')) {
+    if (scope === 'settings' && key === 'manualHelpers') { saveSettings(); applyEngine(); return; }
     saveSettings();
     if (scope === 'settings' && key === 'ghToken') { S.settings.gistId = ''; const b = $('[data-a="syncNow"]'); if (b) b.disabled = !v.trim(); setSyncState(''); }
     if (scope === 'settings' && /Key$/.test(key)) { clearTimeout(ctxT); ctxT = setTimeout(() => { const E = ENGINES[S.settings.engine]; if (E && PROVIDERS[E.prov].keyField === key && (E.prov === 'openai' || E.prov === 'gemini')) applyEngine(); }, 900); }
@@ -1435,6 +1500,24 @@ document.addEventListener('input', e => {
 /* ============================== Akcje ============================== */
 let GEN = null;
 const A = {};
+A.manualCopy = async (id, b) => {
+  if (!MANUAL) return;
+  try { await navigator.clipboard.writeText(MANUAL.prompt); toast('Skopiowano. Wklej w czacie.'); if (b) b.textContent = 'Skopiowano ✓'; }
+  catch { const v = $('#manualPromptView'); v?.closest('details')?.setAttribute('open', ''); const r = document.createRange(); r.selectNodeContents(v); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Nie mam dostępu do schowka. Prompt jest zaznaczony, skopiuj go ręcznie.', true); }
+};
+A.manualPaste = async () => {
+  try { const t = await navigator.clipboard.readText(); if (t) $('#manualAnswer').value = t; else toast('Schowek jest pusty.', true); }
+  catch { toast('Nie mam dostępu do schowka. Wklej odpowiedź w pole ręcznie.', true); $('#manualAnswer').focus(); }
+};
+A.manualDone = () => {
+  if (!MANUAL) return;
+  let t = ($('#manualAnswer').value || '').trim();
+  if (!t) return toast('Wklej najpierw odpowiedź z czatu.', true);
+  if (MANUAL.json && !parseJSON(t)) return toast('To nie wygląda na JSON. Skopiuj całą odpowiedź albo poproś czat o sam JSON.', true);
+  if (!MANUAL.json) t = t.replace(/^```\w*\n?|\n?```$/g, '').replace(/^\*\*(.+?)\*\*$/gm, '$1').replace(/^#{1,6}\s+/gm, '');
+  MANUAL.done(null, t);
+};
+A.manualCancel = () => { if (!MANUAL) return; const e = new Error('Anulowano.'); e.name = 'AbortError'; MANUAL.done(e); };
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-a]'); if (!b) return;
   const fn = A[b.dataset.a]; if (!fn) return;
@@ -1810,7 +1893,7 @@ A.editorPass = async () => {
   openSheet('Redakcja', loader('Korekta zdanie po zdaniu i kontrola ciągłości całej sceny…'));
   let lt = []; S.ltFailed = false;
   if (S.settings.lt) { try { lt = await languageTool(orig); } catch { S.ltFailed = true; } }
-  const chunks = chunkParas(orig);
+  const chunks = chunkParas(orig, isManual('editor') ? 1e9 : 2600);
   let usage = { prompt_tokens: 0, completion_tokens: 0, cost: 0 }, failed = 0, lastErr = null;
   // osobny przebieg ciągłości na całej scenie, równolegle z korektą kawałków
   const continuity = llm('editor', [{ role: 'system', content: CONTINUITY_SYS }, { role: 'user', content: 'SCENA:\n\n' + orig }], { json: true, temp: 0.1, maxTokens: 6000 })
@@ -2118,6 +2201,7 @@ A.delThread = id => { S.project.threads = S.project.threads.filter(t => t.id !==
 
 // --- ustawienia
 A.testConn = async (id, b) => {
+  if (isManual('writer')) return toast('W trybie czatu nie ma czego sprawdzać: Atrament pokaże prompt do skopiowania przy pierwszym zadaniu.');
   b.disabled = true; b.innerHTML = '<span class="spinner"></span> Sprawdzam…';
   try {
     const r = await llm('writer', [{ role: 'user', content: 'Odpowiedz jednym zdaniem po polsku: jaki jest najlepszy sposób, żeby zacząć opowiadanie?' }], { maxTokens: 3000 });
