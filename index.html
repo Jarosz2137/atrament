@@ -787,6 +787,10 @@ async function llmRaw(role, messages, opt = {}) {
   if (opt.maxTokens) body[isOA ? 'max_completion_tokens' : 'max_tokens'] = opt.maxTokens;
   if (isOA && opt.stream) body.stream_options = { include_usage: true };
   if (opt.json) body.response_format = { type: 'json_object' };
+  if (isOR && /:free$/.test(r.model)) {
+    // darmowe modele bywają przeciążone (429): OpenRouter sam spróbuje kolejnych z listy
+    body.models = [...new Set([r.model, 'nvidia/nemotron-3-ultra-550b-a55b:free', 'google/gemma-4-31b-it:free', 'nvidia/nemotron-3.5-super-vl:free'])].slice(0, 3);
+  }
   if (isOR) {
     body.provider = {};
     if (st.denyTraining) body.provider.data_collection = 'deny';
@@ -1446,7 +1450,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
