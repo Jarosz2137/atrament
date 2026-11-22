@@ -1338,7 +1338,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -2200,7 +2200,13 @@ $('#fileIn').addEventListener('change', async e => {
       if (i >= 0) S.projects[i] = meta; else S.projects.push(meta);
     }
     await DB.set('projects', S.projects);
-    if (j.settings) { const { orKey, anKey, msKey, oaKey, gmKey, customKey } = S.settings; S.settings = { ...DEFAULT_SETTINGS, ...j.settings, roles: { ...DEFAULT_SETTINGS.roles, ...(j.settings.roles || {}) }, orKey, anKey, msKey, oaKey, gmKey, customKey }; saveSettings(); }
+    if (j.settings) {
+      // klucze, token i stan synchronizacji są lokalne dla urządzenia: kopia ich nie nadpisuje
+      const { orKey, anKey, msKey, oaKey, gmKey, customKey, ghToken, gistId, lastSync, syncDeleted } = S.settings;
+      const { orKey: _1, anKey: _2, msKey: _3, oaKey: _4, gmKey: _5, customKey: _6, ghToken: _7, gistId: _8, lastSync: _9, syncDeleted: _10, ...rest } = j.settings;
+      S.settings = { ...DEFAULT_SETTINGS, ...rest, roles: { ...DEFAULT_SETTINGS.roles, ...(rest.roles || {}) }, orKey, anKey, msKey, oaKey, gmKey, customKey, ghToken, gistId, lastSync, syncDeleted: syncDeleted || [] };
+      saveSettings();
+    }
     if (j.projects[0]) S.project = migrate(await DB.get('p:' + (S.project && j.projects.some(p => p.id === S.project.id) ? S.project.id : j.projects[0].id)));
     S.sceneId = null; render(); toast(`Wczytano ${j.projects.length} opowieści.`); scheduleSync(1000);
   } catch (err) { toastErr(err instanceof SyntaxError ? new UserError('Plik jest uszkodzony.') : err); }
