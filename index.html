@@ -513,7 +513,7 @@ function httpError(status, text) {
     400: 'Model odrzucił zapytanie.', 401: 'Nieprawidłowy klucz API. Sprawdź go w Ustawieniach.', 402: 'Brak środków na koncie OpenRouter. Doładuj konto albo wybierz tańszy model.',
     403: 'Dostawca zablokował zapytanie (moderacja treści albo uprawnienia klucza).', 404: 'Nie znaleziono modelu albo żaden dostawca nie spełnia Twoich ustawień prywatności. Wyłącz ZDR albo zmień model.',
     408: 'Model nie odpowiedział na czas. Spróbuj ponownie.', 413: 'Za długi tekst dla tego modelu.', 429: 'Limit zapytań. Odczekaj chwilę albo zmień model.',
-    500: 'Błąd po stronie dostawcy. Spróbuj ponownie.', 502: 'Dostawca modelu nie odpowiada. Spróbuj ponownie.', 503: 'Brak dostępnego dostawcy dla tego modelu. Spróbuj za chwilę.',
+    500: 'Błąd po stronie dostawcy. Spróbuj ponownie.', 502: 'Dostawca modelu nie odpowiada. Spróbuj ponownie.', 503: 'Model jest teraz przeciążony po stronie dostawcy (to nie wina apki ani Twojego klucza). Spróbuj za minutę albo przełącz model.',
   };
   if (status === 429 && /limit: ?0\b|free_tier|FreeTier/i.test(text || '')) {
     const e0 = new UserError('Ten model nie jest dostępny na darmowym kluczu (limit 0). Włącz Billing w projekcie Google Cloud, z którego jest klucz, albo wybierz model Flash-Lite. Szczegóły: ' + m.slice(0, 200));
@@ -633,9 +633,15 @@ async function llmAnthropic(role, messages, opt) {
     const t = await res.clone().text().catch(() => '');
     if (/temperature/i.test(t)) { delete body.temperature; res = await send(body); }
   }
+  for (const wait of [2000, 6000]) {
+    if (![500, 502, 503, 504, 529].includes(res.status)) break;
+    toast('Serwer Claude przeciążony, ponawiam za chwilę…');
+    await new Promise(r => setTimeout(r, wait));
+    res = await send(body);
+  }
   if (!res.ok) {
     const t = await res.text().catch(() => '');
-    if (res.status === 529) throw new UserError('Claude jest teraz przeciążony. Spróbuj za chwilę.');
+    if (res.status === 529 || res.status === 503) throw new UserError('Claude jest teraz przeciążony. Spróbuj za chwilę.');
     if (res.status === 401) throw new UserError('Nieprawidłowy klucz Claude API. Sprawdź go w Ustawieniach.');
     if (res.status === 400 && /credit|balance/i.test(t)) throw new UserError('Brak środków na koncie Claude API. Doładuj je w Console (Billing).');
     throw httpError(res.status, t);
@@ -727,6 +733,13 @@ async function llmRaw(role, messages, opt = {}) {
     if (/stream_options/i.test(t) && body.stream_options) { delete body.stream_options; changed = true; }
     if (!changed && (body.reasoning || body.response_format)) { delete body.reasoning; delete body.response_format; changed = true; }
     if (!changed) break;
+    res = await send(body);
+  }
+  // przeciążenie po stronie dostawcy: odczekaj i ponów (2 s, potem 6 s)
+  for (const wait of [2000, 6000]) {
+    if (![500, 502, 503, 504, 529].includes(res.status)) break;
+    toast('Serwer modelu przeciążony, ponawiam za chwilę…');
+    await new Promise(r => setTimeout(r, wait));
     res = await send(body);
   }
   if (!res.ok) throw httpError(res.status, await res.text().catch(() => ''));
@@ -1312,7 +1325,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.8.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.8.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
