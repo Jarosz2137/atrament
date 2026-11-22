@@ -353,7 +353,22 @@ function toast(msg, bad) {
   clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), bad ? 6500 : 2600);
 }
 function toastErr(e) { console.error(e); toast(e instanceof UserError ? e.message : 'Coś poszło nie tak: ' + (e.message || e), true); }
-function autosize(el) { if (!el) return; el.style.height = 'auto'; el.style.height = (el.scrollHeight + 2) + 'px'; }
+// Zmiana wysokości bez skakania strony: chwilowe 'auto' skraca stronę i przeglądarka (zwłaszcza iOS) przewija ją do góry.
+// Trzymamy obecną wysokość jako min-height na czas pomiaru i przywracamy przewinięcie wszystkich przodków.
+function autosize(el) {
+  if (!el) return;
+  const cur = el.offsetHeight, need0 = el.scrollHeight + 2;
+  if (cur && Math.abs(need0 - cur) <= 1) return;
+  const keep = []; for (let n = el.parentElement; n; n = n.parentElement) if (n.scrollTop) keep.push([n, n.scrollTop]);
+  const wy = window.scrollY;
+  const host = el.parentElement; const prevMin = host ? host.style.minHeight : '';
+  if (host && cur) host.style.minHeight = host.offsetHeight + 'px';
+  el.style.height = 'auto';
+  el.style.height = (el.scrollHeight + 2) + 'px';
+  if (host) host.style.minHeight = prevMin;
+  for (const [n, t] of keep) if (n.scrollTop !== t) n.scrollTop = t;
+  if (window.scrollY !== wy) window.scrollTo(0, wy);
+}
 function splitParas(t) { return (t || '').replace(/\r/g, '').split(/\n+/).map(s => s.trim()).filter(Boolean); }
 function joinParas(a) { return a.join('\n\n'); }
 
@@ -1338,7 +1353,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
