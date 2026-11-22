@@ -1278,7 +1278,7 @@ function viewScene(p, sc) {
   <div id="ticBanner"></div>
   <textarea class="prose auto ${busy ? 'streaming' : ''}" id="sceneText" data-f="scene.text" placeholder="Tu pojawi się scena. Możesz też pisać sam: model i archiwista pracują na tym, co tu jest." aria-label="Tekst sceny">${esc(sc.text)}</textarea>
   ${hasText && !busy && sc.endingUsed && wc(sc.text) < sc.words * 0.6 ? `<div class="banner info"><div><b>Krótsza niż cel:</b> ${fmtN(wc(sc.text))} z ~${fmtN(sc.words)} słów. Jeśli czegoś w niej brakuje, możesz ją rozwinąć.</div><div><button class="btn sm" data-a="expand">Rozwiń treścią</button></div></div>` : ''}
-  <div class="meta-line"><span>${fmtN(wc(sc.text))} słów</span>${sc.endingUsed ? `<span>Zakończenie: ${ENDINGS[sc.endingUsed]?.label || ''}</span>` : ''}${sc.usage ? `<span class="mono">${esc(usageLine(sc.usage))}</span>` : ''}</div>
+  <div class="meta-line"><span id="wcNow">${fmtN(wc(sc.text))} słów</span>${sc.endingUsed ? `<span>Zakończenie: ${ENDINGS[sc.endingUsed]?.label || ''}</span>` : ''}${sc.usage ? `<span class="mono">${esc(usageLine(sc.usage))}</span>` : ''}</div>
   ${busy ? `<button class="btn block" data-a="stop"><span class="spinner"></span> Zatrzymaj</button>` : `
   <div class="actions">
     <button class="btn" data-a="editorPass" ${hasText ? '' : 'disabled'}>Redakcja</button>
@@ -1450,7 +1450,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1480,6 +1480,12 @@ document.addEventListener('input', e => {
   if (el.type === 'number' || el.type === 'range' || key === 'words') v = Number(v);
   obj[key] = v;
   if (el.classList.contains('auto')) autosize(el);
+  if (el.id === 'sceneText') {
+    // wklejony albo wpisany tekst: odśwież licznik i odblokuj przyciski bez przerysowania (fokus i kursor zostają)
+    const w = $('#wcNow'); if (w) w.textContent = fmtN(wc(v)) + ' słów';
+    const has = !!String(v).trim();
+    document.querySelectorAll('[data-a="editorPass"],[data-a="factCheck"],[data-a="endings"],[data-a="continue"],[data-a="accept"]').forEach(b => { b.disabled = !has; });
+  }
   if (scope === 'settings' || scope.startsWith('role_')) {
     if (scope === 'settings' && key === 'manualHelpers') { saveSettings(); applyEngine(); return; }
     saveSettings();
