@@ -192,7 +192,7 @@ select { appearance: none; -webkit-appearance: none; padding-right: 30px;
   font-variation-settings: "opsz" 16; overflow: hidden; resize: none;
 }
 .prose.streaming { border-color: var(--accent); }
-input.scene-title { font-family: var(--prose); font-size: 20px; font-weight: 600; background: transparent; border: 0; padding: 2px 0; border-bottom: 1px dashed var(--line); border-radius: 0; }
+input.scene-title { font-family: var(--prose); font-size: 20px; font-weight: 600; background: var(--surface); border: 1px solid var(--line); padding: 8px 11px; border-radius: 8px; }
 .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .meta-line { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
 details.plan, details.adv { display: block; }
@@ -983,6 +983,7 @@ ${sc.text}
 Zwróć JSON dokładnie w tym kształcie:
 {
   "summary": "streszczenie sceny w 2–4 zdaniach",
+  "title": "krótki tytuł sceny, 1–4 słowa, konkretny, bez cudzysłowu",
   "events": [{"text": "fakt: co się stało", "who": ["Imię"], "consequence": "skutek albo pusty tekst", "important": true}],
   "knowledge": [{"character": "Imię", "learned": "czego ta postać dowiedziała się w tej scenie"}],
   "character_updates": [{"character": "Imię", "change": "trwała zmiana: relacja, stan, decyzja"}],
@@ -1121,7 +1122,8 @@ function viewScene(p, sc) {
   return `${keyBanner()}
   <div class="row"><button class="btn ghost" data-a="backToScenes">← ${esc(ch?.title || 'Sceny')}</button>
     <span style="margin-left:auto">${sc.status === 'accepted' ? '<span class="tag ok">w pamięci</span>' : '<span class="tag">szkic</span>'}</span></div>
-  <input class="scene-title" type="text" id="sceneTitle" data-f="scene.title" value="${esc(sc.title)}" aria-label="Tytuł sceny">
+  <label class="field"><span>Tytuł sceny <span class="muted small">(stuknij, żeby zmienić)</span></span>
+    <div class="row"><input class="scene-title grow" type="text" id="sceneTitle" data-f="scene.title" value="${esc(sc.title)}" placeholder="Np. Telefon od Mai">${sc.text.trim() ? `<button class="btn sm" data-a="suggestTitle">Zaproponuj</button>` : ''}</div></label>
   <details class="plan card" ${hasText ? '' : 'open'}>
     <summary><span class="label">Plan sceny</span></summary><div class="stack">
     <label class="field"><span>Co się dzieje</span><textarea class="auto" id="scenePlan" data-f="scene.plan" placeholder="Np. Hanna konfrontuje Tomka w porcie. On kłamie o tamtej nocy, ona to wyczuwa, ale nie zdradza listu.">${esc(sc.plan)}</textarea></label>
@@ -1309,7 +1311,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.8 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.8.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1575,6 +1577,16 @@ A.factCheck = async () => {
     <span class="hint mono">${esc(usageLine(r.usage))}</span>
     <div class="sheet-foot"><button class="btn" data-a="closeSheet">Zamknij</button><button class="btn primary" data-a="applyFacts">Popraw zaznaczone</button></div>`);
 };
+A.suggestTitle = async (id, b) => {
+  const sc = curScene(); b.disabled = true; b.innerHTML = '<span class="spinner"></span>';
+  try {
+    const r = await llm('memory', [{ role: 'system', content: 'Nadajesz tytuły scenom powieści. Tytuł: 1–4 słowa, konkretny (przedmiot, miejsce, zdarzenie), bez spoilerowania zakończenia, bez cudzysłowu i kropki.' }, { role: 'user', content: 'Zaproponuj 5 różnych tytułów, każdy w osobnej linii, bez numeracji.\n\nSCENA:\n' + sc.text.slice(0, 8000) }], { temp: 0.7, maxTokens: 400 });
+    const opts = cleanOutput(r.text).split('\n').map(x => x.replace(/^[\s\-•*\d.)]+/, '').replace(/[„”"]/g, '').trim()).filter(x => x && x.length < 60).slice(0, 5);
+    S.ui = { titles: opts };
+    openSheet('Tytuł sceny', opts.map((t, i) => `<button class="model-row" data-a="pickTitle" data-id="${i}"><span style="font-family:var(--prose);font-size:17px">${esc(t)}</span></button>`).join('') || '<div class="empty">Brak propozycji.</div>');
+  } finally { render(); }
+};
+A.pickTitle = i => { const t = S.ui.titles?.[Number(i)]; if (!t) return; curScene().title = t; saveProject(); closeSheet(); render(); };
 A.learnRule = (k, b) => {
   const i = S.ui.issues?.[Number(k)]; if (!i?.rule) return;
   const p = S.project, line = '- ' + i.rule.trim();
@@ -1815,6 +1827,7 @@ function normalizeExtract(d) {
   const arr = v => Array.isArray(v) ? v : [];
   return {
     summary: String(d.summary || ''),
+    title: String(d.title || '').replace(/[„”"]/g, '').trim().slice(0, 60),
     events: arr(d.events).filter(e => e && e.text),
     knowledge: arr(d.knowledge).filter(k => k && k.character && k.learned),
     character_updates: arr(d.character_updates).filter(k => k && k.character && k.change),
@@ -1854,6 +1867,7 @@ function applyExtraction(sc, x, picked) {
   x.threads_opened.forEach((t, i) => { if (ok('threads_opened', i)) p.threads.push({ id: uid('t'), text: t.text, who: ids(t.who), status: 'open', openedIn: ch.id }); });
   x.threads_closed.forEach((t, i) => { const th = p.threads.find(z => z.id === t.id); if (th && ok('threads_closed', i)) { th.status = 'closed'; th.resolution = t.resolution || ''; th.closedIn = ch.id; } });
   sc.summary = x.summary;
+  if (x.title && /^Scena \d+$/.test(sc.title)) sc.title = x.title; // automatyczny tytuł tylko zamiast domyślnego
   sc.status = 'accepted';
   sc.tickEnding = S.project.tics.detect && detectTics(sc.text, p).tics.some(t => t.id !== 'zakazane');
   if (sc.gen && sc.gen.output !== sc.text) {
