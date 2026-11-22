@@ -152,6 +152,7 @@ select { appearance: none; -webkit-appearance: none; padding-right: 30px;
 .btn.danger { color: var(--bad); }
 .btn.block { width: 100%; }
 .btn[disabled] { opacity: .5; pointer-events: none; }
+.btn.wrap { white-space: normal; text-align: left; justify-content: flex-start; height: auto; max-width: 100%; padding-inline: 0; line-height: 1.35; }
 .btn.sm { min-height: 32px; padding: 5px 10px; font-size: 13.5px; }
 .icon-btn { background: none; border: 0; font-size: 26px; line-height: 1; padding: 4px 8px; cursor: pointer; color: var(--muted); }
 
@@ -1311,7 +1312,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.8.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.8.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1573,7 +1574,7 @@ A.factCheck = async () => {
   S.ui = { issues, endingOk: d.ending_ok !== false, endingNote: String(d.ending_note || '') };
   const endBox = !S.ui.endingOk ? `<div class="banner warn"><div><b>Zakończenie nie spełnia wymagania.</b> ${esc(S.ui.endingNote)}</div><div><button class="btn sm" data-a="endings">Daj 3 inne zakończenia</button></div></div>` : '';
   if (!issues.length) return setSheet(endBox + `<div class="banner info">Nie znalazłem błędów merytorycznych.</div><span class="hint mono">${esc(usageLine(r.usage))}</span>`);
-  setSheet(`${endBox}<div class="card">${issues.map((i, k) => `<label class="xitem"><input type="checkbox" data-fx="${k}" checked><span class="x">${i.quote ? `<i>„${esc(i.quote)}”</i><br>` : ''}<b>${esc(i.problem)}</b>${i.fix ? `<br><span class="muted small">Poprawka: ${esc(i.fix)}</span>` : ''}${i.rule ? `<br><button class="btn sm ghost" data-a="learnRule" data-id="${k}">Zapamiętaj w Realiach: „${esc(i.rule)}”</button>` : ''}</span></label>`).join('')}</div>
+  setSheet(`${endBox}<div class="card">${issues.map((i, k) => `<label class="xitem"><input type="checkbox" data-fx="${k}" checked><span class="x">${i.quote ? `<i>„${esc(i.quote)}”</i><br>` : ''}<b>${esc(i.problem)}</b>${i.fix ? `<br><span class="muted small">Poprawka: ${esc(i.fix)}</span>` : ''}${i.rule ? `<br><button class="btn sm ghost wrap" data-a="learnRule" data-id="${k}">Zapamiętaj w Realiach: „${esc(i.rule)}”</button>` : ''}</span></label>`).join('')}</div>
     <span class="hint mono">${esc(usageLine(r.usage))}</span>
     <div class="sheet-foot"><button class="btn" data-a="closeSheet">Zamknij</button><button class="btn primary" data-a="applyFacts">Popraw zaznaczone</button></div>`);
 };
