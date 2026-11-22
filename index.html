@@ -1073,7 +1073,11 @@ Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończy�
     parts.push('# SCENA BEZ ZAKOŃCZENIA\n' + extra.base + `\n\n# ZADANIE\nNapisz WYŁĄCZNIE zakończenie tej sceny: 1–3 akapity, które płynnie kontynuują ostatnie zdanie. Nie powtarzaj tekstu, który już jest.` + (e ? `\nTyp zakończenia (${e.label}): ${e.ins}` : '') + (ends.length ? `\nNie kończ podobnie do poprzednich scen:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
   } else if (mode === 'ideas') {
     parts.push(`# ZADANIE
-Zaproponuj 5 wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz. Przynajmniej jeden pomysł ma być zaskakujący.
+Zaproponuj 5 wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz.
+Różnicuj świadomie, żeby nie było to pięć razy ta sama historia w innej dekoracji:
+- OBSADA: każdy pomysł ma inny skład osób. Ta sama postać poboczna najwyżej w 2 z 5 pomysłów. Co najmniej jeden pomysł bez żadnej z postaci pobocznych, które były w poprzedniej scenie. Co najmniej jeden pomysł może iść z perspektywy innej postaci niż główna, bez głównej w scenie.
+- RODZAJ: jeden pomysł to bezpośrednia kontynuacja, jeden przeskok w czasie, jeden spokojna scena codzienności lub relacji, jeden zwrot albo zaskoczenie, jeden swobodny.
+- STAWKA: każdy pomysł dotyka innego wątku albo innej sprawy, a nie tego samego konfliktu z innej strony.
 Punktem wyjścia jest STAN ŚWIATA i KONIEC POPRZEDNIEJ SCENY: kto gdzie jest, co ma przy sobie, która jest pora. Nie zmieniaj pory dnia ani nie przeskakuj w czasie po cichu: jeśli pomysł dzieje się później, napisz wprost kiedy, licząc od końca poprzedniej sceny. Postać, która odeszła, nie czeka nagle w tym samym miejscu, a rzeczy nie zmieniają położenia bez powodu (rozbite auto stoi tam, gdzie się rozbiło, albo ktoś je odholował i tekst o tym wie). Jeśli pomysł zaczyna się gdzie indziej albo później, powiedz to wprost w pierwszym zdaniu.
 Każde pojawienie się postaci w pomyśle musi mieć konkretny powód w tej sytuacji: skąd się tam wzięła, jak się dowiedziała, czemu akurat teraz. Cecha postaci (np. że kogoś nachodzi) mówi, jak się zachowuje, gdy już jest, a nie usprawiedliwia, że jest wszędzie; jeśli w danej sytuacji nie ma sensownego powodu, nie wstawiaj jej.
 Nowa osoba nie może być przypadkowo spokrewniona ani powiązana z istniejącymi postaciami (kuzynka, była dziewczyna, sąsiad kogoś z obsady), chyba że pamięć to mówi; takie zbiegi okoliczności brzmią sztucznie. Nowa osoba wie tylko to, co mogła zobaczyć albo usłyszeć.
@@ -1453,7 +1457,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.8 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
