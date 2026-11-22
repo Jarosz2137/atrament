@@ -1006,13 +1006,15 @@ function applyHunks(segs) { return segs.map(s => s.eq != null ? s.eq : (s.on ? s
 /* ============================== Arkusz ============================== */
 function openSheet(title, html) {
   const s = $('#sheet');
-  s.innerHTML = `<div class="sheet-bg" data-a="closeSheet"></div><div class="sheet-panel" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sheet-head"><h2>${esc(title)}</h2><button class="icon-btn" data-a="closeSheet" aria-label="Zamknij">×</button></div><div class="sheet-body" id="sheetBody">${html}</div></div>`;
+  SHEET_DIRTY = false;
+  s.innerHTML = `<div class="sheet-bg" data-a="sheetBg"></div><div class="sheet-panel" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sheet-head"><h2>${esc(title)}</h2><button class="icon-btn" data-a="closeSheet" aria-label="Zamknij">×</button></div><div id="leaveBar"></div><div class="sheet-body" id="sheetBody">${html}</div></div>`;
   s.hidden = false; document.body.classList.add('noscroll');
   s.querySelectorAll('textarea.auto').forEach(autosize);
   return $('#sheetBody');
 }
 function setSheet(html) { const b = $('#sheetBody'); if (b) { b.innerHTML = html; b.querySelectorAll('textarea.auto').forEach(autosize); } }
-function closeSheet() { const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; document.body.classList.remove('noscroll'); S.ui = {}; }
+let SHEET_DIRTY = false;
+function closeSheet() { SHEET_DIRTY = false; const s = $('#sheet'); s.hidden = true; s.innerHTML = ''; document.body.classList.remove('noscroll'); S.ui = {}; }
 const loader = msg => `<div class="row muted"><span class="spinner"></span> ${esc(msg)}</div><div class="skel"></div><div class="skel"></div>`;
 
 /* ============================== Widoki ============================== */
@@ -1228,7 +1230,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.4.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1246,6 +1248,7 @@ function scopeObj(scope) {
 let ctxT = null;
 document.addEventListener('input', e => {
   const el = e.target;
+  if (el.closest && el.closest('#sheet') && el.id !== 'modelSearch') SHEET_DIRTY = true;
   if (el.id === 'chapterSel') { S.project.currentChapter = el.value; saveProject(); render(); return; }
   if (el.id === 'evFilter') { S.evFilter = el.value; render(); return; }
   if (el.id === 'engineQuick') { const [eng, mid] = el.value.split(':'); S.settings.engine = eng; S.settings.pick = { ...(S.settings.pick || {}), [eng]: mid }; applyEngine(); toast('Pisze: ' + curEngineModel().name); return; }
@@ -1288,7 +1291,19 @@ document.addEventListener('click', e => {
   Promise.resolve(fn(b.dataset.id, b)).catch(toastErr);
 });
 
-A.closeSheet = () => closeSheet();
+// Zamykanie arkusza: jeśli coś w nim zmieniono, najpierw zapytaj, zamiast kasować wpisany tekst.
+function askLeave() {
+  const bar = $('#leaveBar'); if (!bar) return closeSheet();
+  const canSave = !!$('#sheetBody [data-a^="save"]');
+  bar.innerHTML = `<div class="banner warn" style="margin:10px 16px 0"><div><b>Masz niezapisane zmiany.</b> Zamknąć bez zapisywania?</div>
+    <div class="row">${canSave ? '<button class="btn sm primary" data-a="leaveSave">Zapisz</button>' : ''}<button class="btn sm danger" data-a="forceClose">Wyrzuć zmiany</button><button class="btn sm" data-a="dismissLeave">Wróć do edycji</button></div></div>`;
+}
+A.closeSheet = () => SHEET_DIRTY ? askLeave() : closeSheet();
+A.sheetBg = () => SHEET_DIRTY ? askLeave() : closeSheet();
+A.forceClose = () => closeSheet();
+A.dismissLeave = () => { const b = $('#leaveBar'); if (b) b.innerHTML = ''; };
+A.leaveSave = () => { const b = $('#sheetBody [data-a^="save"]'); if (b) b.click(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#sheet').hidden) { e.preventDefault(); SHEET_DIRTY ? askLeave() : closeSheet(); } });
 A.nav = id => { S.view = id; if (id !== 'write') { /* zostaw scenę otwartą */ } render(); scrollTo(0, 0); };
 A.memTab = id => { S.memTab = id; render(); };
 
