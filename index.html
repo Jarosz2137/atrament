@@ -593,7 +593,7 @@ const ENGINES = {
       { id: 'k3', name: 'Kimi K3', m: ['kimi-k3'], c: '~5 centów', d: 'Kreatywny, słabszy polski' },
       { id: 'k31', name: 'Kimi K3.1 Pro', m: ['kimi-k3.1-pro'], c: 'cena u Moonshot', d: 'Nowsza wersja' },
     ], note: 'Regulamin Moonshot pozwala używać treści z API do ulepszania usług.' },
-  openrouter: { label: 'OpenRouter', prov: 'openrouter', editor: ['google/gemini-3.8-flash'], memory: ['google/gemini-3.8-flash'], freeEditor: ['google/gemma-4-31b-it:free'],
+  openrouter: { label: 'OpenRouter', prov: 'openrouter', defaultPick: 'nemotron', editor: ['google/gemini-3.8-flash'], memory: ['google/gemini-3.8-flash'], freeEditor: ['google/gemma-4-31b-it:free'],
     models: [
       { id: 'kimi', name: 'Kimi K3', m: ['moonshotai/kimi-k3'], c: '~5 centów', d: 'Z ochroną prywatności' },
       { id: 'gflash', name: 'Gemini 3.8 Flash', m: ['google/gemini-3.8-flash'], c: '~1,3 centa', d: 'Bez trenowania' },
@@ -611,7 +611,7 @@ async function liveModels(prov) {
     return (j.data || []).map(m => String(m.id).replace(/^models\//, ''));
   } catch { return null; }
 }
-const curEngineModel = () => { const st = S.settings, E = ENGINES[st.engine] || ENGINES.claude; return E.models.find(x => x.id === (st.pick || {})[st.engine]) || E.models[0]; };
+const curEngineModel = () => { const st = S.settings, E = ENGINES[st.engine] || ENGINES.claude; return E.models.find(x => x.id === (st.pick || {})[st.engine]) || E.models.find(x => x.id === E.defaultPick) || E.models[0]; };
 async function applyEngine() {
   const st = S.settings, E = ENGINES[st.engine] || ENGINES.claude, M = curEngineModel();
   const slots = [M.m, M.free ? E.freeEditor : (M.cheap && E.cheapEditor) || E.editor, M.free ? E.freeEditor : E.memory];
@@ -1466,7 +1466,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
