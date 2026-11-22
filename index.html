@@ -840,6 +840,20 @@ function evLine(p, e) {
 function lastEndings(p, sc, n = 3) {
   return scenesBefore(p, sc).filter(x => x.s.text).slice(-n).map(x => splitParas(x.s.text).slice(-2).join(' ').slice(-240));
 }
+function lastOpenings(p, sc, n = 3) {
+  return scenesBefore(p, sc).filter(x => x.s.text).slice(-n).map(x => x.s.text.replace(/\s+/g, ' ').trim().slice(0, 200));
+}
+function trigrams(t) { const w = (t.toLowerCase().match(/\p{L}+/gu) || []).slice(0, 70); const set = new Set(); for (let i = 0; i + 2 < w.length; i++) set.add(w[i] + ' ' + w[i + 1] + ' ' + w[i + 2]); return set; }
+function openingSimilar(p, sc) {
+  const mine = trigrams(sc.text); if (mine.size < 8) return '';
+  const cands = scenesBefore(p, sc).filter(x => x.s.text).slice(-5).map(x => ({ label: '„' + x.s.title + '”', t: x.s.text }));
+  if (p.style.sample.trim()) cands.push({ label: 'próbka stylu', t: p.style.sample });
+  for (const c of cands) { const o = trigrams(c.t); let k = 0; for (const x of mine) if (o.has(x)) k++; if (k / Math.min(mine.size, o.size || 1) > 0.2) return c.label; }
+  // to samo pierwsze zdanie (pierwsze 6 słów)
+  const head = t => (t.toLowerCase().match(/\p{L}+/gu) || []).slice(0, 6).join(' ');
+  for (const c of cands) if (head(c.t) && head(c.t) === head(sc.text)) return c.label;
+  return '';
+}
 function pickEnding(p, sc) {
   const recent = scenesBefore(p, sc).slice(-3).map(x => x.s.endingUsed).filter(Boolean);
   const pool = Object.keys(ENDINGS).filter(k => !recent.includes(k));
@@ -860,7 +874,7 @@ Zasady:
 function memoryBlock(p, sc, present) {
   const B = [];
   if (p.style.guide.trim()) B.push('## STYL I ŚWIAT\n' + p.style.guide.trim());
-  if (p.style.sample.trim()) B.push('## PRÓBKA STYLU AUTORA (naśladuj rytm i słownictwo, nie treść)\n' + p.style.sample.trim().slice(0, 7000));
+  if (p.style.sample.trim()) B.push('## PRÓBKA STYLU AUTORA (naśladuj rytm i słownictwo; nie kopiuj treści, obrazów ani pierwszego zdania)\n' + p.style.sample.trim().slice(0, 7000));
   const pres = present.map(charById).filter(Boolean);
   if (pres.length) B.push('## POSTACIE W SCENIE\n' + pres.map(c => charCard(c, true)).join('\n\n'));
   const others = p.characters.filter(c => !present.includes(c.id));
@@ -891,10 +905,12 @@ function buildWriterMessages(p, sc, mode, extra = {}) {
   const prev = scenesBefore(p, sc).filter(x => x.s.text).slice(-1)[0];
   if (prev && mode !== 'ideas') parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(-900));
   const ends = lastEndings(p, sc);
+  const starts = lastOpenings(p, sc);
+  const startsNote = starts.length ? `\nPoprzednie sceny zaczynały się tak. Zacznij INACZEJ: inne pierwsze zdanie, inny obraz, inny punkt wejścia (np. od środka dialogu, od ruchu, od innego miejsca czy zmysłu):\n${starts.map(x => '- „' + x + '…”').join('\n')}` : '';
   if (mode === 'scene') {
     const e = ENDINGS[extra.ending];
     parts.push(`# ZADANIE
-Napisz scenę „${sc.title}”, około ${sc.words} słów.
+Napisz NOWĄ scenę „${sc.title}”, około ${sc.words} słów. Nie powtarzaj ani nie przepisuj poprzedniej sceny: ta scena dzieje się później i wnosi coś nowego.${startsNote}
 Plan sceny: ${sc.plan.trim() || '(brak, poprowadź akcję naturalnie dalej, korzystając z otwartych wątków)'}
 Postacie obecne: ${whoNames(present).join(', ') || 'według planu'}.
 Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończyły się tak. Nie kończ podobnie ani podobną konstrukcją:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
@@ -1115,14 +1131,16 @@ function updateTicBanner() {
   const el = $('#ticBanner'); const sc = curScene(); if (!el || !sc) return;
   if (!S.project.tics.detect || GEN || !sc.text.trim()) { el.innerHTML = ''; return; }
   const { tics, shortTail } = detectTics(sc.text, S.project);
+  const sim = openingSimilar(S.project, sc);
+  if (sim) tics.unshift({ id: 'poczatek', label: 'Początek bardzo podobny do: ' + sim });
   if (!tics.length) { el.innerHTML = ''; return; }
   const ch = chapterOf(sc.id);
-  const endingTic = tics.some(t => t.id !== 'zakazane');
+  const endingTic = tics.some(t => !['zakazane', 'poczatek'].includes(t.id));
   const used = endingTicCount(S.project, ch, sc.id);
   const over = endingTic && used >= S.project.tics.budget;
   el.innerHTML = `<div class="banner warn"><div><b>Wykryte tiki</b>${over ? ` · w tym rozdziale był już ${used} taki koniec (limit: ${S.project.tics.budget})` : ''}</div>
     <div class="stack small">${tics.map(t => '<div>• ' + esc(t.label) + '</div>').join('')}</div>
-    <div class="row">${shortTail >= 2 ? '<button class="btn sm" data-a="cutTail">Utnij puentę</button>' : ''}${endingTic ? '<button class="btn sm" data-a="endings">Daj 3 inne zakończenia</button>' : ''}</div></div>`;
+    <div class="row">${sim ? '<button class="btn sm" data-a="newOpening">Napisz inny początek</button>' : ''}${shortTail >= 2 ? '<button class="btn sm" data-a="cutTail">Utnij puentę</button>' : ''}${tics.some(t => !['zakazane', 'poczatek'].includes(t.id)) ? '<button class="btn sm" data-a="endings">Daj 3 inne zakończenia</button>' : ''}</div></div>`;
 }
 
 function viewMemory() {
@@ -1256,7 +1274,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.5.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1465,6 +1483,22 @@ A.cutTail = () => {
   pushHistory(sc); const ps = splitParas(sc.text); sc.text = joinParas(ps.slice(0, ps.length - shortTail)); saveProject(); render(); toast('Ucięto końcową puentę.');
 };
 
+A.newOpening = async () => {
+  if (GEN) return;
+  const p = S.project, sc = curScene(), ps = splitParas(sc.text);
+  if (ps.length < 3) return toast('Scena jest za krótka, żeby wymienić sam początek.', true);
+  const cut = ps.length > 6 ? 2 : 1, rest = joinParas(ps.slice(cut));
+  const msgs = buildWriterMessages(p, sc, 'scene', { ending: sc.endingUsed || 'cliff' });
+  msgs[1].content += `\n\n# DALSZA CZĘŚĆ SCENY (zostaje bez zmian)\n${rest}\n\n# ZADANIE ZAMIAST POWYŻSZEGO\nNapisz WYŁĄCZNIE nowy początek tej sceny: ${cut === 1 ? 'jeden akapit' : 'dwa akapity'}, które płynnie prowadzą do dalszej części powyżej. Zacznij zupełnie inaczej niż poprzednie sceny i niż próbka stylu. Zwróć tylko ten początek.`;
+  pushHistory(sc);
+  GEN = { ctrl: new AbortController() }; render();
+  try {
+    const r = await llm('writer', msgs, { maxTokens: 3000, signal: GEN.ctrl.signal });
+    sc.text = cleanOutput(r.text) + '\n\n' + rest; sc.usage = r.usage;
+    toast('Nowy początek wstawiony. „Cofnij zmianę” przywróci poprzedni.');
+  } catch (e) { if (e.name !== 'AbortError') toastErr(e); }
+  finally { GEN = null; saveProject(); render(); }
+};
 A.preview = () => {
   const sc = curScene(); const m = buildWriterMessages(S.project, sc, 'scene', { ending: sc.ending === 'auto' ? pickEnding(S.project, sc) : sc.ending });
   const txt = m.map(x => '=== ' + x.role.toUpperCase() + ' ===\n' + x.content).join('\n\n');
