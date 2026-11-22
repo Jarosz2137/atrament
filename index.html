@@ -357,7 +357,7 @@ function toast(msg, bad) {
   const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : ''; t.hidden = false;
   clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), bad ? 6500 : 2600);
 }
-function toastErr(e) { console.error(e); toast(e instanceof UserError ? e.message : 'Coś poszło nie tak: ' + (e.message || e), true); }
+function toastErr(e) { if (e && e.name === 'AbortError') return; console.error(e); toast(e instanceof UserError ? e.message : 'Coś poszło nie tak: ' + (e.message || e), true); }
 // Zmiana wysokości bez skakania strony: chwilowe 'auto' skraca stronę i przeglądarka (zwłaszcza iOS) przewija ją do góry.
 // Trzymamy obecną wysokość jako min-height na czas pomiaru i przywracamy przewinięcie wszystkich przodków.
 function autosize(el) {
@@ -1450,7 +1450,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1529,7 +1529,11 @@ A.manualDone = () => {
   if (!MANUAL.json) t = t.replace(/^```\w*\n?|\n?```$/g, '').replace(/^\*\*(.+?)\*\*$/gm, '$1').replace(/^#{1,6}\s+/gm, '');
   MANUAL.done(null, t);
 };
-A.manualCancel = () => { if (!MANUAL) return; const e = new Error('Anulowano.'); e.name = 'AbortError'; MANUAL.done(e); };
+A.manualCancel = () => {
+  if (!MANUAL) return; const e = new Error('Anulowano.'); e.name = 'AbortError'; MANUAL.done(e);
+  // anulowane zadanie: zamknij też okno, które na nie czekało (ładowanie albo komunikat „Anulowano”)
+  setTimeout(() => { const b = $('#sheetBody'); if (b && !MANUAL && (b.querySelector('.spinner') || /^\s*Anulowano\.\s*$/.test(b.textContent))) closeSheet(); }, 0);
+};
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-a]'); if (!b) return;
   const fn = A[b.dataset.a]; if (!fn) return;
