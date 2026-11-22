@@ -870,17 +870,17 @@ function relevantThreads(p, sc, present, limit = 12) {
     .map(t => ({ t, s: (t.who || []).filter(id => present.includes(id)).length * 3 + overlap(wordSet(t.text), q) }))
     .sort((a, b) => b.s - a.s).slice(0, limit).map(x => x.t);
 }
-function charCard(c, full) {
+function charCard(c, full, lean = 0) {
   const L = [`### ${c.name}${c.aliases ? ' (' + c.aliases + ')' : ''}${c.role ? ' — ' + c.role : ''}`];
   if (c.description) L.push('Kim jest: ' + c.description);
   if (full) {
     if (c.motivation) L.push('Motywacja: ' + c.motivation);
     if (c.voice) L.push('Sposób mówienia: ' + c.voice);
     if (c.relations) L.push('Relacje: ' + c.relations);
-    if (c.changes?.length) L.push('Co się z nią już stało (fakty z wcześniejszych scen): ' + c.changes.slice(-8).join('; '));
-    if (c.knows?.length) L.push('WIE: ' + c.knows.slice(-15).join('; '));
+    if (c.changes?.length) L.push('Co się z nią już stało (fakty z wcześniejszych scen): ' + c.changes.slice(lean ? -4 : -8).join('; '));
+    if (c.knows?.length) L.push('WIE: ' + c.knows.slice(lean ? -6 : -15).join('; '));
     if (c.unknown) L.push('NIE WIE (nie może się tym posługiwać ani o tym wspominać): ' + c.unknown);
-    if ((c.arc || '').trim()) L.push('PLAN AUTORA NA PRZYSZŁOŚĆ (to się JESZCZE NIE wydarzyło; nie pisz tego jako faktu; prowadź fabułę powoli w tę stronę, nie przeskakuj do tego): ' + c.arc.trim());
+    if ((c.arc || '').trim() && !lean) L.push('PLAN AUTORA NA PRZYSZŁOŚĆ (to się JESZCZE NIE wydarzyło; nie pisz tego jako faktu; prowadź fabułę powoli w tę stronę, nie przeskakuj do tego): ' + c.arc.trim());
   }
   return L.join('\n');
 }
@@ -924,38 +924,60 @@ Zasady:
 - Trzymaj skalę opowieści. Nie dokładaj na siłę eskalacji (wypadków, włamań, nagłych katastrof), jeśli nie wynikają z planu sceny albo z wcześniejszych wydarzeń.
 - Zwracasz wyłącznie tekst prozy. Bez tytułu, bez komentarzy, bez markdown.`;
 
-function memoryBlock(p, sc, present) {
+// Realia dla pisarza: tylko linie związane z planem sceny. Linie „Typowe błędy…” są dla sprawdzania faktów, nie dla pisarza.
+function relevantFacts(facts, q, max) {
+  const out = []; let head = '';
+  for (const raw of (facts || '').split('\n')) {
+    const l = raw.trim(); if (!l) continue;
+    if (/^#/.test(l)) { head = l.replace(/^#+\s*/, ''); continue; }
+    if (/typowe błędy/i.test(l)) continue;
+    const sc = overlap(wordSet(l), q); if (sc) out.push({ l, sc, head });
+  }
+  return out.sort((a, b) => b.sc - a.sc).slice(0, max).map(x => x.l.replace(/^[-*]\s*/, '- '));
+}
+// mode: 'full' (sprawdzanie ciągłości: wszystko), 'scene' (pisanie: tylko to, co potrzebne), 'ideas' (najkrócej)
+function memoryBlock(p, sc, present, mode = 'full') {
+  const full = mode === 'full', ideas = mode === 'ideas';
   const B = [];
+  const q = wordSet(sc.plan + ' ' + (sc.where || '') + ' ' + sc.title);
   if (p.style.guide.trim()) B.push('## STYL I ŚWIAT\n' + p.style.guide.trim());
-  if ((p.style.facts || '').trim()) B.push('## REALIA I FAKTY TECHNICZNE (twarde fakty: trzymaj się ich dokładnie; gdy czegoś nie wiesz na pewno, nie podawaj konkretnych liczb)\n' + p.style.facts.trim());
-  if (p.style.sample.trim()) B.push('## PRÓBKA STYLU AUTORA (naśladuj rytm i słownictwo; nie kopiuj treści, obrazów ani pierwszego zdania)\n' + p.style.sample.trim().slice(0, 7000));
+  if ((p.style.facts || '').trim()) {
+    if (full) B.push('## REALIA I FAKTY TECHNICZNE (twarde fakty: trzymaj się ich dokładnie; gdy czegoś nie wiesz na pewno, nie podawaj konkretnych liczb)\n' + p.style.facts.trim());
+    else if (!ideas) { const f = relevantFacts(p.style.facts, q, 6); if (f.length) B.push('## REALIA (tylko do sprawdzenia poprawności; NIE wplataj ich w tekst jako opisu ani wyjaśnień)\n' + f.join('\n')); }
+  }
+  if (p.style.sample.trim() && !ideas) B.push('## PRÓBKA STYLU AUTORA (naśladuj rytm i słownictwo; nie kopiuj treści, obrazów ani pierwszego zdania)\n' + p.style.sample.trim().slice(0, 7000));
   const pres = present.map(charById).filter(Boolean);
-  if (pres.length) B.push('## POSTACIE W SCENIE\n' + pres.map(c => charCard(c, true)).join('\n\n'));
+  if (pres.length) B.push('## POSTACIE W SCENIE\n' + pres.map(c => ideas ? charCard(c, false) : charCard(c, true, full ? 0 : 1)).join('\n\n'));
   const others = p.characters.filter(c => !present.includes(c.id));
   if (others.length) B.push('## INNE POSTACIE (tło)\n' + others.map(c => `- ${c.name}${c.role ? ': ' + c.role : ''}${c.description ? '. ' + c.description.slice(0, 120) : ''}`).join('\n'));
-  // Historia: streszczenia poprzednich rozdziałów + scen bieżącego
+  // Historia: streszczenia poprzednich rozdziałów + scen bieżącego (przy pisaniu: dawne skrótem, ostatnie dokładnie)
   const ch = chapterOf(sc.id) || curChapter();
   const ci = chapterIndex(ch.id);
   const H = [];
-  p.chapters.slice(0, ci).forEach((c, i) => {
+  const keepChapters = full ? ci : Math.min(ci, 2);
+  p.chapters.slice(ci - keepChapters, ci).forEach((c, k) => {
+    const i = ci - keepChapters + k;
     const sum = c.summary || c.scenes.map(s => s.summary).filter(Boolean).join(' ');
-    if (sum) H.push(`R${i + 1}. ${c.title}: ${sum}`);
+    if (sum) H.push(`R${i + 1}. ${c.title}: ${full ? sum : sum.slice(0, 600)}`);
   });
   const before = ch.scenes.slice(0, ch.scenes.findIndex(s => s.id === sc.id));
-  before.forEach(s => { if (s.summary) H.push(`R${ci + 1}, ${s.title}: ${s.summary}`); });
+  const recent = full ? before.length : (ideas ? 2 : 3);
+  const older = before.slice(0, Math.max(0, before.length - recent)), last = before.slice(-recent);
+  if (older.length && !full) { const t = older.map(s => s.title).join(', '); H.push(`R${ci + 1}, wcześniej (${t}): ` + (ch.summary ? ch.summary.slice(0, 500) : older.map(s => (s.summary || '').split(/(?<=\.)\s/)[0]).filter(Boolean).join(' '))); }
+  last.forEach(s => { if (s.summary) H.push(`R${ci + 1}, ${s.title}: ${s.summary}`); });
   if (H.length) B.push('## HISTORIA DOTĄD\n' + H.join('\n'));
-  const evs = relevantEvents(p, sc, present);
+  const evs = relevantEvents(p, sc, present, full ? 24 : ideas ? 6 : 10);
   if (evs.length) B.push('## WAŻNE FAKTY I WYDARZENIA\n' + evs.map(e => evLine(p, e)).join('\n'));
-  const th = relevantThreads(p, sc, present);
+  const th = relevantThreads(p, sc, present, full ? 12 : ideas ? 5 : 4);
   if (th.length) B.push('## OTWARTE WĄTKI (materiał do nawiązań; nie musisz rozwiązywać)\n' + th.map(t => '- ' + t.text).join('\n'));
   const banned = lines(p.banned);
-  if (banned.length) B.push('## ZAKAZANE\n' + banned.map(b => '- ' + b).join('\n'));
-  return '# PAMIĘĆ OPOWIEŚCI\n\n' + B.join('\n\n');
+  if (banned.length && !ideas) B.push('## ZAKAZANE\n' + banned.map(b => '- ' + b).join('\n'));
+  const head = full ? '# PAMIĘĆ OPOWIEŚCI' : '# PAMIĘĆ OPOWIEŚCI\nTo jest tło do pilnowania spójności, a nie lista rzeczy do wpisania. Użyj tylko tego, czego wymaga plan sceny. Reszty nie wspominaj, nie streszczaj i nie nawiązuj do wszystkiego naraz.';
+  return head + '\n\n' + B.join('\n\n');
 }
-
 function buildWriterMessages(p, sc, mode, extra = {}) {
   const present = sc.who || [];
-  const parts = [memoryBlock(p, sc, present)];
+  const parts = [memoryBlock(p, sc, present, mode === 'ideas' ? 'ideas' : 'scene')];
   const prev = scenesBefore(p, sc).filter(x => x.s.text).slice(-1)[0];
   const jump = sc.cont === 'jump';
   if (prev && (!jump || mode !== 'scene')) parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(mode === 'ideas' ? -700 : -900));
@@ -1355,7 +1377,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.6 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
