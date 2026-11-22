@@ -542,12 +542,12 @@ const ENGINES = {
       { id: 'haiku', name: 'Haiku 5.5', m: ['claude-haiku-5-5'], c: '~0,2 centa', d: 'Na ilość', cheap: true },
       { id: 'fable', name: 'Fable 5.1', m: ['claude-fable-5-1'], c: '~17 centów', d: 'Najmocniejszy, najdroższy' },
     ], note: 'Najlepsza polszczyzna. Anthropic nie trenuje na danych z API.' },
-  openai: { label: 'ChatGPT', prov: 'openai', editor: ['gpt-6-luna', 'gpt-6-mini'], memory: ['gpt-6-luna', 'gpt-5.4-nano'],
+  openai: { label: 'ChatGPT', prov: 'openai', editor: ['gpt-6-luna', 'gpt-6-mini'], memory: ['gpt-6-luna', 'gpt-5.4-nano'], cheapEditor: ['gpt-6-luna', 'gpt-6-mini'],
     models: [
       { id: 'astra', name: 'GPT-6 Astra', m: ['gpt-6-astra', 'gpt-6'], c: '~17 centów', d: 'Flagowiec, drogi' },
       { id: 'luna', name: 'GPT-6 Luna', m: ['gpt-6-luna', 'gpt-6-mini'], c: '~0,2 centa', d: 'Szybki i tani', cheap: true },
     ], note: 'Apka sama dobiera dokładne nazwy modeli z Twojego konta OpenAI.' },
-  gemini: { label: 'Gemini', prov: 'gemini', editor: ['gemini-3.8-flash'], memory: ['gemini-3.1-flash-lite'],
+  gemini: { label: 'Gemini', prov: 'gemini', editor: ['gemini-3.8-flash'], memory: ['gemini-3.1-flash-lite'], cheapEditor: ['gemini-3.1-flash-lite'],
     models: [
       { id: 'flash', name: 'Gemini 3.8 Flash', m: ['gemini-3.8-flash'], c: '~1,3 centa', d: 'Dobry i tani' },
       { id: 'argon', name: 'Gemini 4 Argon', m: ['gemini-4-argon'], c: '~3,5 centa', d: 'Wymaga billingu' },
@@ -658,7 +658,24 @@ async function llmAnthropic(role, messages, opt) {
   return { text, usage: { prompt_tokens: inTok + cacheR + cacheW, completion_tokens: outTok, cost }, model: r.model };
 }
 
+// Redaktor i archiwista: jeśli ich model jest niedostępny (np. darmowy klucz, brak billingu), użyj modelu pisarza.
 async function llm(role, messages, opt = {}) {
+  try { return await llmRaw(role, messages, opt); }
+  catch (e) {
+    const st = S.settings, r = st.roles[role], w = st.roles.writer;
+    const fallbackable = [400, 402, 403, 404, 429].includes(e.status) || /Brak klucza|Nie wybrano modelu/.test(e.message || '');
+    if (role === 'writer' || e.name === 'AbortError' || !fallbackable || (r.provider === w.provider && r.model === w.model)) throw e;
+    const saved = { ...r };
+    Object.assign(r, { provider: w.provider, model: w.model });
+    try {
+      const res = await llmRaw(role, messages, opt);
+      toast(`${ROLE_INFO[role].name}: ${saved.model} niedostępny, użyto ${w.model}. Zapamiętałem to.`);
+      saveSettings();
+      return res;
+    } catch (e2) { Object.assign(r, saved); throw e; }
+  }
+}
+async function llmRaw(role, messages, opt = {}) {
   const st = S.settings, r = st.roles[role];
   if (r.provider === 'anthropic') return llmAnthropic(role, messages, opt);
   const P = PROVIDERS[r.provider] || PROVIDERS.custom;
@@ -1230,7 +1247,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.4.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.4.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
