@@ -1078,7 +1078,7 @@ Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończy�
     parts.push(`# ZADANIE
 Zaproponuj ${n} wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz.
 Różnicuj świadomie, żeby nie była to ta sama historia w innej dekoracji:
-- OBSADA: każdy pomysł ma inny skład osób.${leads.length > 1 ? ` Główna obsada to: ${leads.join(', ')}. Co najmniej 2 pomysły to sceny, w których główne postacie są RAZEM i coś się między nimi przesuwa (relacja, konflikt, odkrycie), i to one napędzają scenę, a nie stoją w tle.` : ''} Postać poboczna (spoza głównej obsady) najwyżej w co trzecim pomyśle. Najwyżej jeden pomysł może iść z perspektywy innej postaci bez bohatera głównego w scenie.
+- OBSADA: ten sam skład osób najwyżej w 2 pomysłach.${leads.length > 1 ? ` Główna obsada to: ${leads.join(', ')}. Co najmniej 2 pomysły to sceny, w których główne postacie są RAZEM i coś się między nimi przesuwa (relacja, konflikt, odkrycie), i to one napędzają scenę, a nie stoją w tle.` : ''} Postacie poboczne (spoza głównej obsady) najwyżej w ${Math.ceil(n * 0.4)} z ${n} pomysłów. Najwyżej ${n > 5 ? 2 : 1} ${n > 5 ? 'pomysły mogą' : 'pomysł może'} iść bez bohatera głównego w scenie.
 - RODZAJ: jeden pomysł to bezpośrednia kontynuacja, jeden przeskok w czasie, jeden spokojna scena codzienności lub relacji, jeden zwrot albo zaskoczenie, jeden swobodny.
 - STAWKA: każdy pomysł dotyka innego wątku albo innej sprawy, a nie tego samego konfliktu z innej strony.
 Punktem wyjścia jest STAN ŚWIATA i KONIEC POPRZEDNIEJ SCENY: kto gdzie jest, co ma przy sobie, która jest pora. Nie zmieniaj pory dnia ani nie przeskakuj w czasie po cichu: jeśli pomysł dzieje się później, napisz wprost kiedy, licząc od końca poprzedniej sceny. Postać, która odeszła, nie czeka nagle w tym samym miejscu, a rzeczy nie zmieniają położenia bez powodu (rozbite auto stoi tam, gdzie się rozbiło, albo ktoś je odholował i tekst o tym wie). Jeśli pomysł zaczyna się gdzie indziej albo później, powiedz to wprost w pierwszym zdaniu.
@@ -1463,7 +1463,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.0 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
