@@ -729,6 +729,8 @@ async function llm(role, messages, opt = {}) {
 }
 /* ============================== Tryb ręczny: kopiuj-wklej przez czat ============================== */
 const isManual = role => S.settings.roles[role]?.provider === 'manual';
+// kontrola i poprawki realiów: gdy pisarz jest „przez czat”, a redaktor ma API, analiza idzie automatycznie przez redaktora
+const analysisRole = () => isManual('writer') && !isManual('editor') ? 'editor' : 'writer';
 let MANUAL_Q = Promise.resolve(), MANUAL = null;
 function manualPrompt(role, messages, opt) {
   const sys = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
@@ -1450,7 +1452,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.10.6 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1734,7 +1736,7 @@ A.factCheck = async () => {
   const e = sc.endingUsed ? ENDINGS[sc.endingUsed] : null;
   const user = `${memoryBlock(p, sc, present)}\n\n# WYMAGANIA SCENY\nPlan: ${sc.plan || '—'}\nCel długości: ok. ${sc.words} słów (jest ${wc(sc.text)}); zgłoś tylko, jeśli scena jest wyraźnie niepełna, a nie za samą liczbę słów.\n${e ? `Zamówione zakończenie (${e.label}): ${e.ins}` : ''}\n\n# SCENA\n${sc.text}\n\nZwróć JSON: {"issues":[{"quote":"dokładny cytat ze sceny (krótki)","problem":"co jest nie tak i dlaczego","fix":"jak to naprawić, konkretnie","rule":"ogólna zasada na przyszłość, jedno zdanie, żeby ten typ błędu się nie powtórzył (np. fakt o sprzęcie albo realiach)"}],"ending_ok":true,"ending_note":"czy zakończenie spełnia wymaganie; jeśli nie, dlaczego"}. Maksymalnie 8 najważniejszych problemów, od najpoważniejszych. Pusta lista, jeśli nie ma. Przy ending_ok domyślnie true.`;
   let r;
-  try { r = await llm('writer', [{ role: 'system', content: FACT_SYS }, { role: 'user', content: user }], { json: true, maxTokens: 6000, temp: 0.2 }); }
+  try { r = await llm(analysisRole(), [{ role: 'system', content: FACT_SYS }, { role: 'user', content: user }], { json: true, maxTokens: 6000, temp: 0.2 }); }
   catch (err) { setSheet(`<div class="banner bad">${esc(err.message)}</div>`); throw err; }
   const d = parseJSON(r.text);
   if (!d) return setSheet(`<div class="banner bad">Konsultant zwrócił coś, czego nie umiem odczytać.</div><pre class="ctx">${esc(r.text.slice(0, 2000))}</pre>`);
@@ -1771,7 +1773,7 @@ A.genFacts = async (id, b) => {
   openSheet('Ściąga realiów', loader('Sprawdzam, jakich dziedzin dotyczy opowieść, i spisuję fakty…'));
   const user = `TYTUŁ: ${p.title}\nWYTYCZNE: ${p.style.guide || '—'}\nPOSTACIE:\n${p.characters.map(c => `- ${c.name}: ${c.role} ${c.description}`).join('\n') || '—'}\nSTRESZCZENIA:\n${sums || '—'}\nFRAGMENTY:\n${sample || '—'}\nOBECNE REALIA:\n${p.style.facts || '—'}\n\nUstal, jakich dziedzin wiedzy dotyczy ta opowieść (zawody, sprzęt, technologie, miejsca, epoka, procedury). Dla każdej spisz 5–12 konkretnych, sprawdzonych faktów i typowych błędów, które popełnia autor bez wiedzy fachowej: jak naprawdę działa sprzęt i jak się go używa, poprawna terminologia, jednostki, realne liczby, czego nie da się zrobić. Pisz po polsku, krótko, jedna rzecz w linii, w formacie:\n## Dziedzina\n- fakt\nNie powtarzaj OBECNYCH REALIÓW. Jeśli czegoś nie jesteś pewien, pomiń to. Zwróć tylko listę.`;
   let r;
-  try { r = await llm('writer', [{ role: 'system', content: 'Jesteś konsultantem merytorycznym pisarzy: ekspertem, który zna realia wielu zawodów i dziedzin. Podajesz tylko fakty, których jesteś pewien.' }, { role: 'user', content: user }], { temp: 0.2, maxTokens: 4000 }); }
+  try { r = await llm(analysisRole(), [{ role: 'system', content: 'Jesteś konsultantem merytorycznym pisarzy: ekspertem, który zna realia wielu zawodów i dziedzin. Podajesz tylko fakty, których jesteś pewien.' }, { role: 'user', content: user }], { temp: 0.2, maxTokens: 4000 }); }
   catch (e) { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; }
   const txt = (r.text || '').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/```\w*|```/g, '').replace(/\*\*/g, '').trim();
   setSheet(`<span class="hint">Przejrzyj i popraw, zanim dodasz. Model może się mylić, a Ty znasz swój świat najlepiej.</span>
@@ -1792,7 +1794,7 @@ A.applyFacts = async () => {
   const list = sel.map((i, k) => `${k + 1}. ${i.quote ? '„' + i.quote + '”: ' : ''}${i.problem}${i.fix ? ' → ' + i.fix : ''}`).join('\n');
   const user = `${(p.style.facts || '').trim() ? 'REALIA:\n' + p.style.facts.trim() + '\n\n' : ''}PROBLEMY DO NAPRAWIENIA:\n${list}\n\nSCENA:\n${orig}\n\nPopraw WYŁĄCZNIE miejsca związane z powyższymi problemami, minimalną zmianą (możesz dopisać krótkie zdanie wyjaśnienia, jeśli jest potrzebne). Reszta tekstu ma zostać słowo w słowo. Zachowaj podział na akapity. Zwróć cały tekst sceny i nic więcej.`;
   let r;
-  try { r = await llm('writer', [{ role: 'system', content: 'Jesteś redaktorem merytorycznym polskiej prozy. Wprowadzasz tylko wskazane poprawki.' }, { role: 'user', content: user }], { temp: 0.3 }); }
+  try { r = await llm(analysisRole(), [{ role: 'system', content: 'Jesteś redaktorem merytorycznym polskiej prozy. Wprowadzasz tylko wskazane poprawki.' }, { role: 'user', content: user }], { temp: 0.3 }); }
   catch (err) { setSheet(`<div class="banner bad">${esc(err.message)}</div>`); throw err; }
   const fixed = cleanOutput(r.text), segs = diffHunks(orig, fixed), n = segs.filter(x => x.eq == null).length;
   S.ui = { segs, orig };
