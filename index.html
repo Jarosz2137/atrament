@@ -1283,7 +1283,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1624,6 +1624,8 @@ const EDITOR_JSON_SYS = `Jesteś bardzo dokładnym korektorem i redaktorem polsk
 4. powtórzenia tego samego słowa w sąsiednich zdaniach.
 Nie poprawiasz stylu, który jest poprawny. Nie zmieniasz fabuły ani treści dialogów poza błędami.
 Zwracasz WYŁĄCZNIE JSON: {"fixes":[{"find":"dokładny fragment z tekstu, 3–15 słów, skopiowany znak w znak","replace":"ten sam fragment po poprawce","why":"krótko: rodzaj błędu"}]}. Jeśli nie ma błędów: {"fixes":[]}.`;
+const CONTINUITY_SYS = `Jesteś redaktorem ciągłości. Czytasz CAŁĄ scenę od początku do końca i śledzisz stan świata: gdzie jest każda postać, w jakiej pozycji (siedzi, stoi), co trzyma w rękach i gdzie odłożyła przedmioty, co jest włączone lub otwarte (ekran, okno, stream, telefon), pora dnia, kto co wie i kto już wyszedł. Szukasz WYŁĄCZNIE sprzeczności rozciągniętych na kilka zdań lub akapitów (np. postać odkłada telefon, a później trzyma go w dłoni, choć go nie podniosła; wychodzi z pokoju i nagle w nim siedzi; zamyka okno, które potem znowu ogląda). Gramatyki i stylu nie poprawiasz.
+Zwracasz WYŁĄCZNIE JSON: {"fixes":[{"find":"dokładny fragment z tekstu, 3–15 słów, skopiowany znak w znak","replace":"ten fragment po minimalnej poprawce, która usuwa sprzeczność","why":"krótko: co się nie zgadza"}],"notes":["sprzeczność, której nie da się naprawić jednym fragmentem"]}. Jeśli wszystko się zgadza: {"fixes":[],"notes":[]}.`;
 function chunkParas(text, max = 2600) {
   const out = []; let cur = [];
   for (const p of splitParas(text)) { if (cur.length && (cur.join('\n\n').length + p.length) > max) { out.push(cur.join('\n\n')); cur = []; } cur.push(p); }
@@ -1632,11 +1634,15 @@ function chunkParas(text, max = 2600) {
 }
 A.editorPass = async () => {
   const sc = curScene(); const orig = sc.text;
-  openSheet('Redakcja', loader(S.settings.lt ? 'LanguageTool i redaktor czytają scenę zdanie po zdaniu…' : 'Redaktor czyta scenę zdanie po zdaniu…'));
+  openSheet('Redakcja', loader('Korekta zdanie po zdaniu i kontrola ciągłości całej sceny…'));
   let lt = []; S.ltFailed = false;
   if (S.settings.lt) { try { lt = await languageTool(orig); } catch { S.ltFailed = true; } }
   const chunks = chunkParas(orig);
   let usage = { prompt_tokens: 0, completion_tokens: 0, cost: 0 }, failed = 0, lastErr = null;
+  // osobny przebieg ciągłości na całej scenie, równolegle z korektą kawałków
+  const continuity = llm('editor', [{ role: 'system', content: CONTINUITY_SYS }, { role: 'user', content: 'SCENA:\n\n' + orig }], { json: true, temp: 0.1, maxTokens: 6000 })
+    .then(r => { if (r.usage) { usage.prompt_tokens += r.usage.prompt_tokens || 0; usage.completion_tokens += r.usage.completion_tokens || 0; usage.cost += r.usage.cost || 0; } const d = parseJSON(r.text) || {}; return { fixes: (Array.isArray(d.fixes) ? d.fixes : []).map(f => ({ ...f, why: 'ciągłość: ' + (f?.why || '') })), notes: (Array.isArray(d.notes) ? d.notes : []).map(String).filter(x => x.trim()) }; })
+    .catch(() => ({ fixes: [], notes: [], failed: true }));
   const results = await Promise.all(chunks.map(async ch => {
     const hints = lt.filter(x => ch.includes(x.bad)).slice(0, 30).map(x => `- „${x.ctx}”: ${x.msg}${x.rep.length ? ' → ' + x.rep.join(' / ') : ''}`).join('\n');
     const user = (hints ? `Automatyczny korektor (LanguageTool) zgłosił możliwe problemy. Część może być fałszywa, oceń sam:\n${hints}\n\n` : '') + 'FRAGMENT:\n\n' + ch;
@@ -1647,7 +1653,10 @@ A.editorPass = async () => {
       return Array.isArray(d?.fixes) ? d.fixes : [];
     } catch (e) { failed++; lastErr = e; return []; }
   }));
-  if (failed === chunks.length) { setSheet(`<div class="banner bad">${esc(lastErr?.message || 'Redaktor nie odpowiedział.')}</div>`); return; }
+  const cont = await continuity;
+  if (failed === chunks.length && cont.failed) { setSheet(`<div class="banner bad">${esc(lastErr?.message || 'Redaktor nie odpowiedział.')}</div>`); return; }
+  results.push(cont.fixes);
+  const notesHtml = cont.notes.length ? `<div class="banner warn"><b>Ciągłość do sprawdzenia ręcznie</b>${cont.notes.map(x => '<div class="small">• ' + esc(x) + '</div>').join('')}</div>` : '';
   // naniesienie poprawek: każdą w pierwszym miejscu, gdzie pasuje dokładnie
   let fixed = orig; const applied = [], missed = [];
   for (const f of results.flat()) {
@@ -1658,9 +1667,9 @@ A.editorPass = async () => {
   const segs = diffHunks(orig, fixed), n = segs.filter(x => x.eq == null).length;
   S.ui = { segs, orig };
   const ltInfo = !S.settings.lt ? 'wyłączony' : S.ltFailed ? 'niedostępny' : lt.length + ' uwag';
-  const foot = `<span class="hint mono">${esc(usageLine(usage))} · fragmentów: ${chunks.length}${failed ? ` (nieudanych: ${failed})` : ''} · LanguageTool: ${ltInfo}</span>`;
-  if (!n) return setSheet(`<div class="banner info">Redaktor nie znalazł nic do poprawy.</div>${missed.length ? `<div class="banner warn small">Redaktor zgłosił ${missed.length} uwag, ale nie dało się ich dopasować do tekstu: ${missed.map(m => esc('„' + m.find + '” → „' + m.replace + '”')).join('; ')}</div>` : ''}${foot}`);
-  setSheet(`<div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
+  const foot = `<span class="hint mono">${esc(usageLine(usage))} · fragmentów: ${chunks.length}${failed ? ` (nieudanych: ${failed})` : ''} · ciągłość całej sceny: ${cont.failed ? 'nie udała się' : 'sprawdzona'} · LanguageTool: ${ltInfo}</span>`;
+  if (!n) return setSheet(`${notesHtml}<div class="banner info">Redaktor nie znalazł nic do poprawy.</div>${missed.length ? `<div class="banner warn small">Redaktor zgłosił ${missed.length} uwag, ale nie dało się ich dopasować do tekstu: ${missed.map(m => esc('„' + m.find + '” → „' + m.replace + '”')).join('; ')}</div>` : ''}${foot}`);
+  setSheet(`${notesHtml}<div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
     <div class="diff" id="diffBox">${diffHtml()}</div>
     <details class="card"><summary class="label" style="cursor:pointer">Dlaczego (${applied.length})</summary><div class="stack small" style="margin-top:8px">${applied.map(a => `<div>„${esc(a.find)}” → „${esc(a.replace)}”${a.why ? ` <span class="muted">(${esc(a.why)})</span>` : ''}</div>`).join('')}</div></details>
     ${missed.length ? `<div class="hint">Nie dopasowano do tekstu: ${missed.length} uwag.</div>` : ''}
