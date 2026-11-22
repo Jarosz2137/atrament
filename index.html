@@ -992,7 +992,7 @@ Napisz NOWĄ scenę „${sc.title}”. Cel długości: ok. ${sc.words} słów. O
 Realia: trzymaj się sekcji REALIA i kanonu. Liczby podawaj z jednostkami i tylko wtedy, gdy jesteś pewien. Postacie mogą się mylić, ale wtedy tekst ma to pokazać.
 ${jump ? 'CIĄGŁOŚĆ: ta scena NIE zaczyna się tam, gdzie skończyła się poprzednia. Jest przeskok w czasie lub miejscu. Nie wracaj do sytuacji z końca poprzedniej sceny, chyba że plan tego wymaga; najwyżej wspomnij jednym zdaniem, co się stało w międzyczasie, jeśli to potrzebne.' : 'CIĄGŁOŚĆ: scena może zaczynać się po poprzedniej, ale o tym, gdzie i co się dzieje, decyduje PLAN SCENY, a nie koniec poprzedniej sceny.'}
 ${(sc.where || '').trim() ? 'GDZIE I KIEDY: ' + sc.where.trim() + ' (to jest wiążące).' : ''}
-Plan sceny: ${sc.plan.trim() || '(brak, poprowadź akcję naturalnie dalej, korzystając z otwartych wątków)'}
+Plan sceny: ${sc.plan.trim() || '(brak planu: wymyśl jedną nową, wiarygodną sytuację, która popycha historię do przodu; możesz wprowadzić nowe miejsce, osobę albo przeskok w czasie, nawet jeśli nie ma ich w pamięci; nie odgrzewaj motywów z poprzedniej sceny)'}
 Postacie obecne: ${whoNames(present).join(', ') || 'według planu'}.
 Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończyły się tak. Nie kończ podobnie ani podobną konstrukcją:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
   } else if (mode === 'continue') {
@@ -1004,6 +1004,7 @@ Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończy�
     parts.push(`# ZADANIE
 Zaproponuj 5 wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz. Przynajmniej jeden pomysł ma być zaskakujący.
 Punktem wyjścia jest STAN ŚWIATA i KONIEC POPRZEDNIEJ SCENY: kto gdzie jest, co ma przy sobie, która jest pora. Postać, która odeszła, nie czeka nagle w tym samym miejscu, a rzeczy nie zmieniają położenia bez powodu (rozbite auto stoi tam, gdzie się rozbiło, albo ktoś je odholował i tekst o tym wie). Jeśli pomysł zaczyna się gdzie indziej albo później, powiedz to wprost w pierwszym zdaniu.
+Wolno ci wprowadzać nowe, wiarygodne sytuacje, miejsca i osoby, których nie ma w pamięci, a także przeskoki w czasie (następny dzień, tydzień później). Pamięć mówi, co już było, a nie co musi się pojawić. Co najmniej 2 z 5 pomysłów mają NIE opierać się na rekwizytach i motywach z poprzedniej sceny. To, że coś często pojawia się w pamięci (np. jakaś drobna sprawa czy przedmiot), nie znaczy, że jest ważne: nie wracaj do tego tylko dlatego, że łatwo to chwycić.
 Pisz poprawną, prostą polszczyzną: krótkie zdania, poprawna odmiana, żadnych dziwnych słów.
 Format: każdy pomysł w osobnej linii, dokładnie tak:
 TYTUŁ :: plan sceny w 2–3 zdaniach
@@ -1377,7 +1378,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.8 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
