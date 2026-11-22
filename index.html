@@ -879,7 +879,7 @@ function charCard(c, full, lean = 0) {
     if (c.relations) L.push('Relacje: ' + c.relations);
     if (c.changes?.length) L.push('Co się z nią już stało (fakty z wcześniejszych scen): ' + c.changes.slice(lean ? -4 : -8).join('; '));
     if (c.knows?.length) L.push('WIE: ' + c.knows.slice(lean ? -6 : -15).join('; '));
-    if (c.unknown) L.push('NIE WIE (nie może się tym posługiwać ani o tym wspominać): ' + c.unknown);
+    L.push('NIE WIE (nie może się tym posługiwać ani o tym wspominać): ' + (c.unknown || 'niczego, czego sama nie widziała ani nie usłyszała w scenach, w których była; nie zna ludzi, których nie poznała'));
     if ((c.arc || '').trim() && !lean) L.push('PLAN AUTORA NA PRZYSZŁOŚĆ (to się JESZCZE NIE wydarzyło; nie pisz tego jako faktu; prowadź fabułę powoli w tę stronę, nie przeskakuj do tego): ' + c.arc.trim());
   }
   return L.join('\n');
@@ -1004,6 +1004,7 @@ Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończy�
     parts.push(`# ZADANIE
 Zaproponuj 5 wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz. Przynajmniej jeden pomysł ma być zaskakujący.
 Punktem wyjścia jest STAN ŚWIATA i KONIEC POPRZEDNIEJ SCENY: kto gdzie jest, co ma przy sobie, która jest pora. Postać, która odeszła, nie czeka nagle w tym samym miejscu, a rzeczy nie zmieniają położenia bez powodu (rozbite auto stoi tam, gdzie się rozbiło, albo ktoś je odholował i tekst o tym wie). Jeśli pomysł zaczyna się gdzie indziej albo później, powiedz to wprost w pierwszym zdaniu.
+Nowa osoba nie może być przypadkowo spokrewniona ani powiązana z istniejącymi postaciami (kuzynka, była dziewczyna, sąsiad kogoś z obsady), chyba że pamięć to mówi; takie zbiegi okoliczności brzmią sztucznie. Nowa osoba wie tylko to, co mogła zobaczyć albo usłyszeć.
 Wolno ci wprowadzać nowe, wiarygodne sytuacje, miejsca i osoby, których nie ma w pamięci, a także przeskoki w czasie (następny dzień, tydzień później). Pamięć mówi, co już było, a nie co musi się pojawić. Co najmniej 2 z 5 pomysłów mają NIE opierać się na rekwizytach i motywach z poprzedniej sceny. To, że coś często pojawia się w pamięci (np. jakaś drobna sprawa czy przedmiot), nie znaczy, że jest ważne: nie wracaj do tego tylko dlatego, że łatwo to chwycić.
 Pisz poprawną, prostą polszczyzną: krótkie zdania, poprawna odmiana, żadnych dziwnych słów.
 Format: każdy pomysł w osobnej linii, dokładnie tak:
@@ -1049,7 +1050,7 @@ Zwróć JSON dokładnie w tym kształcie:
   "events": [{"text": "fakt: co się stało", "who": ["Imię"], "consequence": "skutek albo pusty tekst", "important": true}],
   "knowledge": [{"character": "Imię", "learned": "czego ta postać dowiedziała się w tej scenie"}],
   "character_updates": [{"character": "Imię", "change": "trwała zmiana: relacja, stan, decyzja"}],
-  "new_characters": [{"name": "Imię", "description": "kim jest, jedno zdanie"}],
+  "new_characters": [{"name": "Imię", "description": "kim jest, jedno zdanie", "relations": "z kim jest powiązana i skąd się znają, TYLKO jeśli scena to mówi", "knows": ["co ta postać wie po tej scenie"], "unknown": "czego ta postać NIE wie: ważne fakty i sekrety opowieści, przy których jej nie było, oraz osoby, których nie zna (konkretnie, po imieniu)"}],
   "threads_opened": [{"text": "nowa zagadka, obietnica, zapowiedź albo niewyjaśniony detal", "who": ["Imię"]}],
   "threads_closed": [{"id": "identyfikator z listy", "resolution": "jak się rozwiązał"}],
   "continuity": ["sprzeczność sceny z kanonem albo z tym, co postać może wiedzieć; pusta lista, jeśli brak"]
@@ -1378,7 +1379,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.8 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.9 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1918,7 +1919,7 @@ function reviewHtml() {
   ${sec('Nowe wydarzenia', 'events', x.events, e => `${esc(e.text)}${e.consequence ? `<br><span class="muted small">→ ${esc(e.consequence)}</span>` : ''}${e.who?.length ? `<br><span class="small muted">${esc(e.who.join(', '))}</span>` : ''}${e.important ? ' <span class="tag warn">ważne</span>' : ''}`)}
   ${sec('Czego dowiedziały się postacie', 'knowledge', x.knowledge, k => `<b>${esc(k.character)}</b>: ${esc(k.learned)}`)}
   ${sec('Zmiany postaci', 'character_updates', x.character_updates, k => `<b>${esc(k.character)}</b>: ${esc(k.change)}`)}
-  ${sec('Nowe postacie', 'new_characters', x.new_characters, c => `<b>${esc(c.name)}</b>: ${esc(c.description || '')}`)}
+  ${sec('Nowe postacie', 'new_characters', x.new_characters, c => `<b>${esc(c.name)}</b>: ${esc(c.description || '')}${c.unknown ? `<br><span class="hint">Nie wie: ${esc(c.unknown)}</span>` : ''}`)}
   ${sec('Nowe wątki', 'threads_opened', x.threads_opened, t => esc(t.text))}
   ${sec('Zamknięte wątki', 'threads_closed', x.threads_closed, t => `${esc(thText(t.id))}<br><span class="muted small">Rozwiązanie: ${esc(t.resolution || '')}</span>`)}
   <span class="hint mono">${esc(usageLine(S.ui.usage))}</span>
@@ -1928,7 +1929,7 @@ function applyExtraction(sc, x, picked) {
   const p = S.project, ch = chapterOf(sc.id);
   const ok = (k, i) => !picked || picked.has(k + ':' + i);
   const ids = names => (names || []).map(n => findChar(n)?.id).filter(Boolean);
-  x.new_characters.forEach((c, i) => { if (ok('new_characters', i)) p.characters.push({ id: uid('ch'), name: c.name.trim(), aliases: '', role: '', description: c.description || '', motivation: '', voice: '', relations: '', knows: [], unknown: '', changes: [] }); });
+  x.new_characters.forEach((c, i) => { if (ok('new_characters', i)) p.characters.push({ id: uid('ch'), name: c.name.trim(), aliases: '', role: '', description: c.description || '', motivation: '', voice: '', relations: String(c.relations || ''), knows: (Array.isArray(c.knows) ? c.knows : []).map(String).filter(Boolean), unknown: String(c.unknown || '').trim() || 'Wie tylko to, co sama widziała albo usłyszała w scenach, w których występuje. Nie zna spraw ani ludzi, z którymi się nie zetknęła.', changes: [] }); });
   // zastąp stare wpisy tej sceny, jeśli aktualizujemy ponownie
   p.events = p.events.filter(e => e.sceneId !== sc.id);
   x.events.forEach((e, i) => { if (ok('events', i)) p.events.push({ id: uid('e'), chapterId: ch.id, sceneId: sc.id, text: e.text, who: ids(e.who), consequence: e.consequence || '', important: !!e.important }); });
