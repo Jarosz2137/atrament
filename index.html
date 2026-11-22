@@ -470,6 +470,8 @@ let saveT = null;
 function saveProject() {
   if (!S.project) return;
   S.project.updated = Date.now();
+  S.project.dirty = true;
+  scheduleSync();
   clearTimeout(saveT);
   saveT = setTimeout(async () => {
     await DB.set('p:' + S.project.id, S.project);
@@ -1242,12 +1244,19 @@ function viewSettings() {
     <span class="hint">Apka sama zbiera pary „co napisał model → Twoja wersja” i „wybrane zakończenie → odrzucone”. Format JSONL pasuje do Unsloth i TRL.</span>
     <div class="row"><button class="btn grow" data-a="exportSFT" ${sft ? '' : 'disabled'}>Eksport SFT</button><button class="btn grow" data-a="exportDPO" ${dpo ? '' : 'disabled'}>Eksport DPO</button></div>
   </div>
+  <div class="card" id="syncCard">
+    <div class="label">Synchronizacja między urządzeniami</div>
+    <label class="field"><span>Token GitHub</span><input type="password" id="ghToken" data-f="settings.ghToken" value="${esc(st.ghToken || '')}" placeholder="github_pat_…" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <span class="hint">Opowieści lądują w prywatnym Gist na Twoim GitHubie. Token załóż na <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>: Account permissions → Gists → <b>Read and write</b>, nic więcej. Wklej ten sam token na każdym urządzeniu. Klucze API nie są synchronizowane.</span>
+    <div class="row"><button class="btn primary grow" data-a="syncNow" ${st.ghToken ? '' : 'disabled'}>Synchronizuj teraz</button></div>
+    <span class="hint" id="syncStatus">${syncStatusText()}</span>
+  </div>
   <div class="card">
     <div class="label">Kopia zapasowa</div>
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.4.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1279,6 +1288,7 @@ document.addEventListener('input', e => {
   if (el.classList.contains('auto')) autosize(el);
   if (scope === 'settings' || scope.startsWith('role_')) {
     saveSettings();
+    if (scope === 'settings' && key === 'ghToken') { S.settings.gistId = ''; const b = $('[data-a="syncNow"]'); if (b) b.disabled = !v.trim(); setSyncState(''); }
     if (scope === 'settings' && /Key$/.test(key)) { clearTimeout(ctxT); ctxT = setTimeout(() => { const E = ENGINES[S.settings.engine]; if (E && PROVIDERS[E.prov].keyField === key && (E.prov === 'openai' || E.prov === 'gemini')) applyEngine(); }, 900); }
     if (el.type === 'range') { const t = $('#tv_' + scope.slice(5)); if (t) t.textContent = v; }
     if (key === 'provider') {
@@ -1349,6 +1359,7 @@ A.openProject = async id => {
 A.delProject = async (id, b) => {
   if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Na pewno?'; return; }
   await DB.del('p:' + id); S.projects = S.projects.filter(x => x.id !== id); await DB.set('projects', S.projects);
+  if (S.settings.ghToken) { S.settings.syncDeleted = [...(S.settings.syncDeleted || []), id]; saveSettings(); scheduleSync(1500); }
   if (S.project?.id === id) {
     if (S.projects[0]) S.project = migrate(await DB.get('p:' + S.projects[0].id));
     else { const p = newProject('Nowa opowieść'); S.project = p; await DB.set('p:' + p.id, p); S.projects = [{ id: p.id, title: p.title, updated: p.updated }]; await DB.set('projects', S.projects); }
@@ -1510,7 +1521,7 @@ A.pickEnding = id => {
   const opts = u.types.map((t, i) => u.variants[i]?.text ? { t, text: u.variants[i].text } : null).filter(Boolean);
   const chosen = id === 'old' ? u.oldEnd : u.variants[Number(id)]?.text; if (!chosen) return;
   const rejected = [...opts.map(o => o.text), u.oldEnd].filter(x => x !== chosen);
-  for (const rj of rejected) p.dataset.dpo.push({ prompt: u.neutral, chosen, rejected: rj, at: Date.now() });
+  for (const rj of rejected) dsPush(p, 'dpo', { prompt: u.neutral, chosen, rejected: rj, at: Date.now() });
   if (id !== 'old') { pushHistory(sc); sc.text = u.base + '\n\n' + chosen; sc.endingUsed = u.types[Number(id)]; }
   saveProject(); closeSheet(); render(); toast(id === 'old' ? 'Zostawiono. Wybór zapisany do datasetu.' : 'Podmieniono zakończenie.');
 };
@@ -1606,10 +1617,10 @@ function applyExtraction(sc, x, picked) {
   sc.tickEnding = S.project.tics.detect && detectTics(sc.text, p).tics.some(t => t.id !== 'zakazane');
   if (sc.gen && sc.gen.output !== sc.text) {
     p.dataset.sft = p.dataset.sft.filter(z => z.sceneId !== sc.id);
-    p.dataset.sft.push({ sceneId: sc.id, messages: sc.gen.messages, output: sc.gen.output, final: sc.text, model: sc.gen.model, at: Date.now() });
+    dsPush(p, 'sft', { sceneId: sc.id, messages: sc.gen.messages, output: sc.gen.output, final: sc.text, model: sc.gen.model, at: Date.now() });
   } else if (sc.gen) {
     p.dataset.sft = p.dataset.sft.filter(z => z.sceneId !== sc.id);
-    p.dataset.sft.push({ sceneId: sc.id, messages: sc.gen.messages, output: sc.gen.output, final: sc.text, model: sc.gen.model, at: Date.now(), unchanged: true });
+    dsPush(p, 'sft', { sceneId: sc.id, messages: sc.gen.messages, output: sc.gen.output, final: sc.text, model: sc.gen.model, at: Date.now(), unchanged: true });
   }
 }
 A.applyExtract = () => {
@@ -1834,7 +1845,7 @@ A.exportDPO = () => {
 };
 A.exportBackup = async () => {
   const projects = []; for (const m of S.projects) { const p = await DB.get('p:' + m.id); if (p) projects.push(p); }
-  const { orKey, anKey, msKey, oaKey, gmKey, customKey, ...settings } = S.settings;
+  const { orKey, anKey, msKey, oaKey, gmKey, customKey, ghToken, gistId, ...settings } = S.settings;
   saveFile(`atrament-kopia-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify({ app: 'atrament', v: 1, at: Date.now(), settings, projects }), 'application/json');
 };
 A.importBackup = () => $('#fileIn').click();
@@ -2152,6 +2163,175 @@ A.exportDocx = () => saveFile(slug(S.project.title) + '.docx', buildDocx(S.proje
 A.exportMd = () => saveFile(slug(S.project.title) + '.md', buildMarkdown(S.project), 'text/markdown');
 A.printBook = () => { $('#print').innerHTML = `<article class="book" lang="pl">${bookHtml(S.project)}</article>`; closeSheet(); setTimeout(() => window.print(), 60); };
 
+
+/* ============================== Synchronizacja (prywatny GitHub Gist) ============================== */
+// Każda opowieść to plik p-<id>.json, dataset do fine-tune'u w kawałkach d-<id>-<n>.json (po 20 wpisów),
+// a atrament-index.json trzyma numer wersji każdej opowieści. Zmiany wykrywamy po numerze wersji, nie po zegarze urządzenia.
+const GH = 'https://api.github.com', SYNC_DESC = 'Atrament: synchronizacja (nie edytuj ręcznie)', SHARD = 20, INDEX = 'atrament-index.json';
+let syncBusy = false, syncT = null, syncState = '';
+function dsPush(p, kind, e) { const seq = p.dataset.seq ?? (p.dataset.sft.length + p.dataset.dpo.length); e.sh = Math.floor(seq / SHARD); p.dataset.seq = seq + 1; p.dataset[kind].push(e); }
+function scheduleSync(ms = 8000) { if (!S.settings?.ghToken) return; clearTimeout(syncT); syncT = setTimeout(() => syncNow({ quiet: true }), ms); }
+function syncStatusText() {
+  const st = S.settings;
+  if (!st.ghToken) return 'Wyłączona. Wklej token, żeby włączyć.';
+  if (syncState === 'sync') return 'Synchronizuję…';
+  if (syncState === 'err') return 'Ostatnia próba się nie udała. Stuknij „Synchronizuj teraz”, żeby zobaczyć błąd.';
+  return st.lastSync ? 'Ostatnia synchronizacja: ' + new Date(st.lastSync).toLocaleString('pl-PL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Jeszcze nie synchronizowano.';
+}
+function setSyncState(v) { syncState = v; const el = $('#syncStatus'); if (el) el.textContent = syncStatusText(); }
+async function gh(path, opt = {}) {
+  let r;
+  try {
+    r = await fetch(GH + path, { ...opt, headers: { Authorization: 'Bearer ' + S.settings.ghToken.trim(), Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(opt.body ? { 'Content-Type': 'application/json' } : {}) } });
+  } catch { throw new UserError('Brak połączenia z GitHubem.'); }
+  if (r.status === 401) throw new UserError('Token GitHub jest nieprawidłowy albo wygasł. Wygeneruj nowy.');
+  if (r.status === 403 || r.status === 404) { const t = await r.text().catch(() => ''); const e = new UserError('GitHub odmówił dostępu. Token musi mieć uprawnienie Gists: Read and write. ' + t.slice(0, 100)); e.status = r.status; throw e; }
+  if (r.status === 422) throw new UserError('GitHub odrzucił dane synchronizacji (prawdopodobnie za duże).');
+  if (!r.ok) throw new UserError('Błąd GitHub ' + r.status + '.');
+  return r.status === 204 ? null : r.json();
+}
+async function findOrCreateGist() {
+  if (S.settings.gistId) return S.settings.gistId;
+  for (let page = 1; page <= 10; page++) {
+    const list = await gh(`/gists?per_page=100&page=${page}`);
+    const g = list.find(x => x.description === SYNC_DESC);
+    if (g) { S.settings.gistId = g.id; saveSettings(); return g.id; }
+    if (list.length < 100) break;
+  }
+  const g = await gh('/gists', { method: 'POST', body: JSON.stringify({ description: SYNC_DESC, public: false, files: { [INDEX]: { content: JSON.stringify({ v: 1, projects: {} }) } } }) });
+  S.settings.gistId = g.id; saveSettings(); return g.id;
+}
+async function gistFileText(f) {
+  if (!f) return null;
+  if (!f.truncated) return f.content;
+  const r = await fetch(f.raw_url);
+  if (!r.ok) throw new UserError('Nie udało się pobrać pliku synchronizacji z GitHuba.');
+  return r.text();
+}
+const shardSig = sh => `${sh.sft.length}:${sh.dpo.length}:${Math.max(0, ...sh.sft.map(e => e.at || 0), ...sh.dpo.map(e => e.at || 0))}`;
+function shardsOf(p) {
+  const out = {};
+  for (const kind of ['sft', 'dpo']) for (const e of p.dataset?.[kind] || []) { const k = e.sh ?? 0; (out[k] ||= { sft: [], dpo: [] })[kind].push(e); }
+  return out;
+}
+function upsertMeta(p) {
+  const meta = { id: p.id, title: p.title, updated: p.updated };
+  const i = S.projects.findIndex(x => x.id === p.id); if (i >= 0) S.projects[i] = meta; else S.projects.push(meta);
+}
+async function removeLocal(pid) {
+  await DB.del('p:' + pid); S.projects = S.projects.filter(x => x.id !== pid);
+  if (S.project?.id === pid) {
+    if (S.projects[0]) S.project = migrate(await DB.get('p:' + S.projects[0].id));
+    else { const p = newProject('Nowa opowieść'); p.dirty = false; S.project = p; await DB.set('p:' + p.id, p); S.projects = [{ id: p.id, title: p.title, updated: p.updated }]; }
+    S.sceneId = null; return true;
+  }
+  return false;
+}
+async function syncNow({ quiet } = {}) {
+  if (!S.settings?.ghToken || syncBusy) return;
+  if (GEN) return scheduleSync(5000);
+  syncBusy = true; setSyncState('sync');
+  let rerender = false, pulled = 0, pushed = 0, conflicts = 0;
+  try {
+    // najpierw zapisz to, co czeka w kolejce zapisu
+    if (saveT) { clearTimeout(saveT); saveT = null; await DB.set('p:' + S.project.id, S.project); upsertMeta(S.project); }
+    const gid = await findOrCreateGist();
+    let g;
+    try { g = await gh('/gists/' + gid); }
+    catch (e) { if (e.status === 404) { S.settings.gistId = ''; saveSettings(); } throw e; }
+    const files = g.files || {};
+    const idx = JSON.parse((await gistFileText(files[INDEX])) || '{"v":1,"projects":{}}');
+    idx.projects ||= {};
+    const out = {};
+    let idxChanged = false;
+
+    // usunięte na tym urządzeniu
+    for (const pid of S.settings.syncDeleted || []) {
+      idx.projects[pid] = { deleted: true, rev: (idx.projects[pid]?.rev || 0) + 1 };
+      for (const n of Object.keys(files)) if (n === `p-${pid}.json` || n.startsWith(`d-${pid}-`)) out[n] = null;
+      idxChanged = true;
+    }
+    const pendingDeleted = [...(S.settings.syncDeleted || [])];
+
+    // z chmury do urządzenia
+    for (const [pid, meta] of Object.entries(idx.projects)) {
+      const has = S.projects.some(x => x.id === pid);
+      if (meta.deleted) { if (has && !pendingDeleted.includes(pid)) { if (await removeLocal(pid)) rerender = true; pulled++; } continue; }
+      const local = has ? (S.project?.id === pid ? S.project : await DB.get('p:' + pid)) : null;
+      if (local && (meta.rev || 0) <= (local.syncRev || 0)) continue;
+      if (local && local.dirty) {
+        // ta sama opowieść zmieniona na dwóch urządzeniach: wersja z tego urządzenia zostaje jako kopia
+        const copy = JSON.parse(JSON.stringify(local));
+        Object.assign(copy, { id: uid('p'), title: local.title + ' (kopia z konfliktu)', syncRev: 0, dirty: true, updated: Date.now() });
+        await DB.set('p:' + copy.id, copy); upsertMeta(copy); conflicts++;
+      }
+      const coreText = await gistFileText(files[`p-${pid}.json`]);
+      if (!coreText) continue;
+      const core = JSON.parse(coreText);
+      const ds = { sft: [], dpo: [], seq: core.dsSeq || 0 }, sig = {};
+      for (const [n, f] of Object.entries(files)) {
+        if (!n.startsWith(`d-${pid}-`)) continue;
+        const k = n.slice(`d-${pid}-`.length, -5);
+        const sh = JSON.parse(await gistFileText(f));
+        sh.sft ||= []; sh.dpo ||= [];
+        ds.sft.push(...sh.sft); ds.dpo.push(...sh.dpo); sig[k] = shardSig(sh);
+      }
+      ds.sft.sort((a, b) => (a.at || 0) - (b.at || 0)); ds.dpo.sort((a, b) => (a.at || 0) - (b.at || 0));
+      delete core.dsSeq;
+      const proj = migrate({ ...core, dataset: ds });
+      Object.assign(proj, { syncRev: meta.rev || 0, syncSig: sig, dirty: false });
+      await DB.set('p:' + pid, proj); upsertMeta(proj);
+      if (S.project?.id === pid) { S.project = proj; if (S.sceneId && !curScene()) S.sceneId = null; rerender = true; }
+      pulled++;
+    }
+
+    // z urządzenia do chmury
+    const snaps = [];
+    for (const m of [...S.projects]) {
+      const p = S.project?.id === m.id ? S.project : await DB.get('p:' + m.id);
+      if (!p || p.sample) continue;
+      const meta = idx.projects[p.id];
+      if (meta && !meta.deleted && !p.dirty) continue;
+      const { dataset, syncRev, syncSig, dirty, ...core } = p;
+      core.dsSeq = dataset?.seq || 0;
+      out[`p-${p.id}.json`] = { content: JSON.stringify(core) };
+      const sig = {};
+      for (const [k, sh] of Object.entries(shardsOf(p))) { sig[k] = shardSig(sh); if ((syncSig || {})[k] !== sig[k]) out[`d-${p.id}-${k}.json`] = { content: JSON.stringify(sh) }; }
+      for (const k of Object.keys(syncSig || {})) if (!(k in sig) && files[`d-${p.id}-${k}.json`]) out[`d-${p.id}-${k}.json`] = null;
+      const rev = (meta?.rev || 0) + 1;
+      idx.projects[p.id] = { title: p.title, rev, at: Date.now() }; idxChanged = true;
+      snaps.push({ p, rev, sig, updated: p.updated });
+    }
+
+    for (const [n, v] of Object.entries(out)) if (v === null && !files[n]) delete out[n];
+    if (idxChanged || Object.keys(out).length) {
+      out[INDEX] = { content: JSON.stringify(idx) };
+      await gh('/gists/' + gid, { method: 'PATCH', body: JSON.stringify({ files: out }) });
+      for (const sn of snaps) {
+        Object.assign(sn.p, { syncRev: sn.rev, syncSig: sn.sig });
+        if (sn.p.updated === sn.updated) sn.p.dirty = false; // zmiany wpisane w trakcie synchronizacji polecą następnym razem
+        await DB.set('p:' + sn.p.id, sn.p);
+      }
+      pushed = snaps.length;
+      S.settings.syncDeleted = (S.settings.syncDeleted || []).filter(x => !pendingDeleted.includes(x));
+    }
+    await DB.set('projects', S.projects);
+    S.settings.lastSync = Date.now(); saveSettings();
+    setSyncState('ok');
+    if (rerender && !GEN) render(); else if ($('#projName') && S.project) $('#projName').textContent = S.project.title;
+    if (conflicts) toast(`Ta sama opowieść była zmieniona na dwóch urządzeniach. Twoja wersja z tego urządzenia jest zapisana jako „kopia z konfliktu”.`, true);
+    else if (!quiet) toast(pulled || pushed ? `Zsynchronizowano: pobrano ${pulled}, wysłano ${pushed}.` : 'Wszystko aktualne.');
+  } catch (e) {
+    setSyncState('err');
+    if (!quiet) toastErr(e); else console.warn('sync', e);
+  } finally { syncBusy = false; }
+}
+A.syncNow = async (id, b) => {
+  if (b) { b.disabled = true; b.innerHTML = '<span class="spinner"></span> Synchronizuję…'; }
+  await syncNow();
+  if (S.view === 'settings') render();
+};
+
 /* ============================== Start ============================== */
 function migrate(p) {
   p.style = p.style || { guide: '', sample: '' };
@@ -2178,6 +2358,8 @@ function migrate(p) {
   S.project = migrate(await DB.get('p:' + id));
   render();
   try { navigator.storage?.persist?.(); } catch {}
+  syncNow({ quiet: true });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow({ quiet: true }); });
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });

@@ -63,6 +63,10 @@ Eksport w Ustawieniach, format JSONL zgodny z Unsloth / TRL. Gdy wytrenujesz mod
 - ZDR (zero przechowywania) to opcja dodatkowa. Mocno zawęża dostawców.
 - LanguageTool wysyła tekst do api.languagetool.org. Możesz to wyłączyć.
 
+## Synchronizacja
+
+Ustawienia → Synchronizacja: wklej token GitHub z uprawnieniem tylko do Gistów (Read and write). Opowieści trafiają do jednego prywatnego Gist na Twoim koncie i synchronizują się same przy otwarciu apki i kilka sekund po każdej zmianie. Ten sam token wklejasz na każdym urządzeniu. Jeśli tę samą opowieść zmienisz na dwóch urządzeniach naraz, nic nie przepada: wersja z drugiego urządzenia zostaje jako „kopia z konfliktu”. Klucze API się nie synchronizują.
+
 ## Kopie
 
 iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób co jakiś czas „Zapisz kopię” w Ustawieniach (plik JSON, bez kluczy).
