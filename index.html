@@ -1230,7 +1230,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.4.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.4.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1299,7 +1299,10 @@ function askLeave() {
     <div class="row">${canSave ? '<button class="btn sm primary" data-a="leaveSave">Zapisz</button>' : ''}<button class="btn sm danger" data-a="forceClose">Wyrzuć zmiany</button><button class="btn sm" data-a="dismissLeave">Wróć do edycji</button></div></div>`;
 }
 A.closeSheet = () => SHEET_DIRTY ? askLeave() : closeSheet();
-A.sheetBg = () => SHEET_DIRTY ? askLeave() : closeSheet();
+// Kliknięcie obok okna: okna z formularzem (postać, wydarzenie, wątek, wklejanie tekstu) się nie zamykają.
+// Zamyka się je krzyżykiem, „Anuluj” albo „Zapisz”. Okna do samego czytania zamykają się jak dawniej.
+const sheetHasForm = () => !!document.querySelector('#sheetBody input:not([type=search]):not([type=checkbox]), #sheetBody textarea');
+A.sheetBg = () => { if (SHEET_DIRTY) return askLeave(); if (sheetHasForm()) { const p = $('.sheet-panel'); p?.animate?.([{ transform: 'translateY(0)' }, { transform: 'translateY(-6px)' }, { transform: 'translateY(0)' }], { duration: 180 }); return; } closeSheet(); };
 A.forceClose = () => closeSheet();
 A.dismissLeave = () => { const b = $('#leaveBar'); if (b) b.innerHTML = ''; };
 A.leaveSave = () => { const b = $('#sheetBody [data-a^="save"]'); if (b) b.click(); };
