@@ -1283,7 +1283,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.6.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1615,30 +1615,56 @@ A.pickEnding = id => {
 };
 
 // --- redakcja
+// Redakcja: model nie przepisuje całej sceny (słabe modele odsyłają ją wtedy bez zmian), tylko zwraca listę
+// konkretnych poprawek „znajdź → zamień”, a apka nanosi je sama. Scena idzie w kawałkach, żeby nic nie umknęło.
+const EDITOR_JSON_SYS = `Jesteś bardzo dokładnym korektorem i redaktorem polskiej prozy. Czytasz fragment zdanie po zdaniu i wypisujesz KAŻDY błąd:
+1. gramatyka i odmiana: zgodność przypadka, liczby i rodzaju w każdej frazie (np. „zamiast czystego pulpitów” → „zamiast czystych pulpitów”, „z wąskiego kręgów” → „z wąskiego kręgu”), złe formy, składnia,
+2. ortografia i pisownia wyrażeń (np. „wczoraj popołudniu” → „wczoraj po południu”, „z resztą” → „zresztą”), literówki, interpunkcja,
+3. logika wewnątrz zdania i między zdaniami: sprzeczności fizyczne i czynności niemożliwe naraz (np. „gestykulował wolną ręką, nie zdejmując jej z kierownicy”), przedmioty, które pojawiają się lub znikają bez sensu, kalki z angielskiego,
+4. powtórzenia tego samego słowa w sąsiednich zdaniach.
+Nie poprawiasz stylu, który jest poprawny. Nie zmieniasz fabuły ani treści dialogów poza błędami.
+Zwracasz WYŁĄCZNIE JSON: {"fixes":[{"find":"dokładny fragment z tekstu, 3–15 słów, skopiowany znak w znak","replace":"ten sam fragment po poprawce","why":"krótko: rodzaj błędu"}]}. Jeśli nie ma błędów: {"fixes":[]}.`;
+function chunkParas(text, max = 2600) {
+  const out = []; let cur = [];
+  for (const p of splitParas(text)) { if (cur.length && (cur.join('\n\n').length + p.length) > max) { out.push(cur.join('\n\n')); cur = []; } cur.push(p); }
+  if (cur.length) out.push(cur.join('\n\n'));
+  return out;
+}
 A.editorPass = async () => {
   const sc = curScene(); const orig = sc.text;
-  openSheet('Redakcja', loader(S.settings.lt ? 'LanguageTool i redaktor czytają scenę…' : 'Redaktor czyta scenę…'));
-  let hints = ''; S.ltFailed = false;
-  if (S.settings.lt) {
+  openSheet('Redakcja', loader(S.settings.lt ? 'LanguageTool i redaktor czytają scenę zdanie po zdaniu…' : 'Redaktor czyta scenę zdanie po zdaniu…'));
+  let lt = []; S.ltFailed = false;
+  if (S.settings.lt) { try { lt = await languageTool(orig); } catch { S.ltFailed = true; } }
+  const chunks = chunkParas(orig);
+  let usage = { prompt_tokens: 0, completion_tokens: 0, cost: 0 }, failed = 0, lastErr = null;
+  const results = await Promise.all(chunks.map(async ch => {
+    const hints = lt.filter(x => ch.includes(x.bad)).slice(0, 30).map(x => `- „${x.ctx}”: ${x.msg}${x.rep.length ? ' → ' + x.rep.join(' / ') : ''}`).join('\n');
+    const user = (hints ? `Automatyczny korektor (LanguageTool) zgłosił możliwe problemy. Część może być fałszywa, oceń sam:\n${hints}\n\n` : '') + 'FRAGMENT:\n\n' + ch;
     try {
-      const m = await languageTool(orig);
-      hints = m.slice(0, 60).map(x => `- „${x.ctx}”: ${x.msg}${x.rep.length ? ' → ' + x.rep.join(' / ') : ''}`).join('\n');
-    } catch { hints = ''; S.ltFailed = true; /* LT niedostępny: idziemy dalej bez niego */ }
+      const r = await llm('editor', [{ role: 'system', content: EDITOR_JSON_SYS }, { role: 'user', content: user }], { json: true, temp: 0.1, maxTokens: 6000 });
+      if (r.usage) { usage.prompt_tokens += r.usage.prompt_tokens || 0; usage.completion_tokens += r.usage.completion_tokens || 0; usage.cost += r.usage.cost || 0; }
+      const d = parseJSON(r.text);
+      return Array.isArray(d?.fixes) ? d.fixes : [];
+    } catch (e) { failed++; lastErr = e; return []; }
+  }));
+  if (failed === chunks.length) { setSheet(`<div class="banner bad">${esc(lastErr?.message || 'Redaktor nie odpowiedział.')}</div>`); return; }
+  // naniesienie poprawek: każdą w pierwszym miejscu, gdzie pasuje dokładnie
+  let fixed = orig; const applied = [], missed = [];
+  for (const f of results.flat()) {
+    if (!f || typeof f.find !== 'string' || typeof f.replace !== 'string' || !f.find.trim() || f.find === f.replace) continue;
+    if (fixed.includes(f.find)) { fixed = fixed.replace(f.find, f.replace); applied.push(f); }
+    else { const loose = f.find.replace(/\s+/g, ' ').trim(); const idx = fixed.replace(/\s+/g, ' ').indexOf(loose); if (idx < 0) missed.push(f); else missed.push(f); }
   }
-  const user = (hints ? `Automatyczny korektor (LanguageTool) zgłosił możliwe problemy. Część zgłoszeń może być fałszywa, oceń je sam:\n${hints}\n\n` : '') + 'TEKST DO KOREKTY:\n\n' + orig;
-  let r;
-  try { r = await llm('editor', [{ role: 'system', content: EDITOR_SYS }, { role: 'user', content: user }]); }
-  catch (e) { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; }
-  const fixed = cleanOutput(r.text);
-  const ratio = fixed.length / Math.max(1, orig.length);
-  const segs = diffHunks(orig, fixed);
-  const n = segs.filter(s => s.eq == null).length;
+  const segs = diffHunks(orig, fixed), n = segs.filter(x => x.eq == null).length;
   S.ui = { segs, orig };
-  if (!n) return setSheet(`<div class="banner info">Redaktor nie znalazł nic do poprawy.</div><span class="hint mono">${esc(usageLine(r.usage))}</span>`);
-  setSheet(`${ratio < 0.8 || ratio > 1.25 ? '<div class="banner warn"><b>Uwaga:</b> redaktor mocno zmienił długość tekstu. Przejrzyj zmiany dokładnie.</div>' : ''}
-    <div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
+  const ltInfo = !S.settings.lt ? 'wyłączony' : S.ltFailed ? 'niedostępny' : lt.length + ' uwag';
+  const foot = `<span class="hint mono">${esc(usageLine(usage))} · fragmentów: ${chunks.length}${failed ? ` (nieudanych: ${failed})` : ''} · LanguageTool: ${ltInfo}</span>`;
+  if (!n) return setSheet(`<div class="banner info">Redaktor nie znalazł nic do poprawy.</div>${missed.length ? `<div class="banner warn small">Redaktor zgłosił ${missed.length} uwag, ale nie dało się ich dopasować do tekstu: ${missed.map(m => esc('„' + m.find + '” → „' + m.replace + '”')).join('; ')}</div>` : ''}${foot}`);
+  setSheet(`<div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
     <div class="diff" id="diffBox">${diffHtml()}</div>
-    <span class="hint mono">${esc(usageLine(r.usage))} · LanguageTool: ${!S.settings.lt ? 'wyłączony' : S.ltFailed ? 'niedostępny' : (hints ? hints.split('\n').length + ' uwag' : '0 uwag')}</span>
+    <details class="card"><summary class="label" style="cursor:pointer">Dlaczego (${applied.length})</summary><div class="stack small" style="margin-top:8px">${applied.map(a => `<div>„${esc(a.find)}” → „${esc(a.replace)}”${a.why ? ` <span class="muted">(${esc(a.why)})</span>` : ''}</div>`).join('')}</div></details>
+    ${missed.length ? `<div class="hint">Nie dopasowano do tekstu: ${missed.length} uwag.</div>` : ''}
+    ${foot}
     <div class="sheet-foot"><button class="btn" data-a="closeSheet">Anuluj</button><button class="btn primary" data-a="applyHunks">Zastosuj zaznaczone</button></div>`);
 };
 function diffHtml() { return S.ui.segs.map((s, i) => s.eq != null ? esc(s.eq) : `<button class="hunk ${s.on ? '' : 'off'}" data-a="toggleHunk" data-id="${i}" aria-pressed="${s.on}">${s.del ? `<del>${esc(s.del)}</del>` : ''}${s.ins ? `<ins>${esc(s.ins)}</ins>` : ''}</button>`).join(''); }
