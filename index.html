@@ -958,8 +958,8 @@ function buildWriterMessages(p, sc, mode, extra = {}) {
   const parts = [memoryBlock(p, sc, present)];
   const prev = scenesBefore(p, sc).filter(x => x.s.text).slice(-1)[0];
   const jump = sc.cont === 'jump';
-  if (prev && mode !== 'ideas' && (!jump || mode !== 'scene')) parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(-900));
-  if (prev?.s.endState && mode !== 'ideas') parts.push('# STAN ŚWIATA NA KOŃCU POPRZEDNIEJ SCENY (kto gdzie jest; trzymaj się tego)\n' + prev.s.endState);
+  if (prev && (!jump || mode !== 'scene')) parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(mode === 'ideas' ? -700 : -900));
+  if (prev?.s.endState) parts.push('# STAN ŚWIATA NA KOŃCU POPRZEDNIEJ SCENY (kto gdzie jest; trzymaj się tego)\n' + prev.s.endState);
   const ends = lastEndings(p, sc);
   const starts = lastOpenings(p, sc);
   const startsNote = starts.length ? `\nPoprzednie sceny zaczynały się tak. Zacznij INACZEJ: inne pierwsze zdanie, inny obraz, inny punkt wejścia (np. od środka dialogu, od ruchu, od innego miejsca czy zmysłu):\n${starts.map(x => '- „' + x + '…”').join('\n')}` : '';
@@ -981,6 +981,8 @@ Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończy�
   } else if (mode === 'ideas') {
     parts.push(`# ZADANIE
 Zaproponuj 5 wyraźnie różnych pomysłów na następną scenę. Wykorzystaj otwarte wątki i wcześniejsze wydarzenia (nawiązania, konsekwencje, powroty), ale nie rozwiązuj wszystkiego naraz. Przynajmniej jeden pomysł ma być zaskakujący.
+Punktem wyjścia jest STAN ŚWIATA i KONIEC POPRZEDNIEJ SCENY: kto gdzie jest, co ma przy sobie, która jest pora. Postać, która odeszła, nie czeka nagle w tym samym miejscu, a rzeczy nie zmieniają położenia bez powodu (rozbite auto stoi tam, gdzie się rozbiło, albo ktoś je odholował i tekst o tym wie). Jeśli pomysł zaczyna się gdzie indziej albo później, powiedz to wprost w pierwszym zdaniu.
+Pisz poprawną, prostą polszczyzną: krótkie zdania, poprawna odmiana, żadnych dziwnych słów.
 Format: każdy pomysł w osobnej linii, dokładnie tak:
 TYTUŁ :: plan sceny w 2–3 zdaniach
 Bez numeracji, bez wstępu, bez komentarzy.`);
@@ -1353,7 +1355,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.6 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1700,7 +1702,8 @@ A.preview = () => {
 A.ideas = async () => {
   const sc = curScene();
   openSheet('Pomysły na scenę', loader('Pisarz przegląda wątki i wydarzenia…'));
-  const r = await llm('writer', buildWriterMessages(S.project, sc, 'ideas'), { temp: Math.min(1.1, S.settings.roles.writer.temp + 0.2) }).catch(e => { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; });
+  const cheap = !!curEngineModel().cheap || !!curEngineModel().free;
+  const r = await llm('writer', buildWriterMessages(S.project, sc, 'ideas'), { temp: cheap ? Math.min(0.8, S.settings.roles.writer.temp) : Math.min(1.0, S.settings.roles.writer.temp + 0.15) }).catch(e => { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; });
   const ideas = cleanOutput(r.text).split('\n').map(l => l.replace(/^[\s\-•*\d.)]+/, '').trim()).filter(l => l.includes('::')).map(l => { const [t, ...rest] = l.split('::'); return { t: t.trim(), p: rest.join('::').trim() }; });
   S.ui = { ideas };
   if (!ideas.length) return setSheet(`<div class="banner warn">Model nie zwrócił pomysłów w oczekiwanym formacie.</div><pre class="ctx">${esc(r.text)}</pre>`);
