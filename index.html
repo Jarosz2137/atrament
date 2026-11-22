@@ -1203,6 +1203,10 @@ function viewStyle() {
     <span class="hint">${fmtN(wc(p.style.sample))} słów. Najlepiej działa 500–1500.</span>
   </div>
   <div class="card">
+    <label class="field"><span>Słownik: tych słów nie poprawiaj</span><textarea class="auto" id="dict" data-f="project.dict" placeholder="Np. Stavelot, Raidillon, camber, setup">${esc(p.dict || '')}</textarea></label>
+    <span class="hint">Imiona i ksywki postaci, słowa z cyframi (GT3, M4, F82) i skróty wielkimi literami (PSI) apka chroni sama. Tu dopisz resztę, po przecinku albo w liniach.</span>
+  </div>
+  <div class="card">
     <label class="field"><span>Zakazane frazy (jedna w linii)</span><textarea class="auto" id="banned" data-f="project.banned">${esc(p.banned)}</textarea></label>
     <span class="hint">Model dostaje tę listę w każdym zapytaniu, a wykrywacz podkreśla je w gotowym tekście.</span>
   </div>
@@ -1283,7 +1287,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1627,10 +1631,17 @@ const EDITOR_JSON_SYS = `Jesteś bardzo dokładnym korektorem i redaktorem polsk
 2. ortografia i pisownia wyrażeń (np. „wczoraj popołudniu” → „wczoraj po południu”, „z resztą” → „zresztą”), literówki, interpunkcja,
 3. logika wewnątrz zdania i między zdaniami: sprzeczności fizyczne i czynności niemożliwe naraz (np. „gestykulował wolną ręką, nie zdejmując jej z kierownicy”), przedmioty, które pojawiają się lub znikają bez sensu, kalki z angielskiego,
 4. powtórzenia tego samego słowa w sąsiednich zdaniach.
-Nie poprawiasz stylu, który jest poprawny. Nie zmieniasz fabuły ani treści dialogów poza błędami.
+Nie poprawiasz stylu, który jest poprawny. Nie zmieniasz fabuły ani treści dialogów poza błędami. Nie ruszasz nazw własnych, modeli aut, nicków i terminów technicznych (np. GT3, M4 F82, Stavelot, camber).
 Zwracasz WYŁĄCZNIE JSON: {"fixes":[{"find":"dokładny fragment z tekstu, 3–15 słów, skopiowany znak w znak","replace":"ten sam fragment po poprawce","why":"krótko: rodzaj błędu"}]}. Jeśli nie ma błędów: {"fixes":[]}.`;
 const CONTINUITY_SYS = `Jesteś redaktorem ciągłości. Czytasz CAŁĄ scenę od początku do końca i śledzisz stan świata: gdzie jest każda postać, w jakiej pozycji (siedzi, stoi), co trzyma w rękach i gdzie odłożyła przedmioty, co jest włączone lub otwarte (ekran, okno, stream, telefon), pora dnia, kto co wie i kto już wyszedł. Szukasz WYŁĄCZNIE sprzeczności rozciągniętych na kilka zdań lub akapitów (np. postać odkłada telefon, a później trzyma go w dłoni, choć go nie podniosła; wychodzi z pokoju i nagle w nim siedzi; zamyka okno, które potem znowu ogląda). Gramatyki i stylu nie poprawiasz.
 Zwracasz WYŁĄCZNIE JSON: {"fixes":[{"find":"dokładny fragment z tekstu, 3–15 słów, skopiowany znak w znak","replace":"ten fragment po minimalnej poprawce, która usuwa sprzeczność","why":"krótko: co się nie zgadza"}],"notes":["sprzeczność, której nie da się naprawić jednym fragmentem"]}. Jeśli wszystko się zgadza: {"fixes":[],"notes":[]}.`;
+function protectedWords(p) {
+  const set = new Set();
+  const add = t => String(t || '').split(/[\n,;]+/).map(x => x.trim().toLowerCase()).filter(Boolean).forEach(x => { set.add(x); x.split(/\s+/).forEach(y => set.add(y)); });
+  add(p.dict);
+  p.characters.forEach(c => { add(c.name); add(c.aliases); });
+  return set;
+}
 function chunkParas(text, max = 2600) {
   const out = []; let cur = [];
   for (const p of splitParas(text)) { if (cur.length && (cur.join('\n\n').length + p.length) > max) { out.push(cur.join('\n\n')); cur = []; } cur.push(p); }
@@ -1674,14 +1685,22 @@ A.editorPass = async () => {
   // naniesienie poprawek: każdą w pierwszym miejscu, gdzie pasuje dokładnie
   // 1) poprawki LanguageTool z gotową zamianą: nanoszone wprost (każdą można odrzucić w podglądzie)
   let fixed = orig; const applied = [], missed = [], ltNotes = [];
-  const ltFix = lt.filter(x => x.rep.length && x.rep[0] !== x.bad && x.rule !== 'style' && x.rule !== 'whitespace').sort((a, b) => b.off - a.off);
+  const prot = protectedWords(S.project);
+  const isProtected = x => {
+    const w = x.bad.trim(); if (!w) return true;
+    if (prot.has(w.toLowerCase())) return true;
+    if (/\d/.test(w) || /[A-ZĄĆĘŁŃÓŚŹŻ].*[A-ZĄĆĘŁŃÓŚŹŻ]/.test(w) || /_/.test(w)) return true; // GT3, M4, F82, PSI, nicki
+    if (x.rule === 'misspelling' && /^[A-ZĄĆĘŁŃÓŚŹŻ]/.test(w)) return true; // nazwy własne
+    return false;
+  };
+  const ltFix = lt.filter(x => x.rep.length && x.rep[0] !== x.bad && x.rule !== 'style' && x.rule !== 'whitespace' && !isProtected(x)).sort((a, b) => b.off - a.off);
   let lastStart = Infinity;
   for (const x of ltFix) {
     if (x.off + x.len > lastStart) continue; // nakładające się zgłoszenia
     fixed = fixed.slice(0, x.off) + x.rep[0] + fixed.slice(x.off + x.len); lastStart = x.off;
     applied.push({ find: x.bad, replace: x.rep[0], why: 'LanguageTool: ' + x.msg });
   }
-  for (const x of lt) if (!x.rep.length) ltNotes.push(`„${x.ctx}”: ${x.msg}`);
+  for (const x of lt) if (!x.rep.length && !isProtected(x)) ltNotes.push(`„${x.ctx}”: ${x.msg}`);
   // 2) poprawki redaktora
   for (const f of results.flat()) {
     if (!f || typeof f.find !== 'string' || typeof f.replace !== 'string' || !f.find.trim() || f.find === f.replace) continue;
@@ -2487,6 +2506,7 @@ function migrate(p) {
   p.dataset = p.dataset || { sft: [], dpo: [] };
   p.book = { ...defaultBook(), ...(p.book || {}) };
   if (p.banned == null) p.banned = DEFAULT_BANNED.join('\n');
+  if (p.dict == null) p.dict = '';
   p.characters = p.characters || []; p.events = p.events || []; p.threads = p.threads || [];
   if (!p.chapters?.length) p.chapters = [{ id: uid('c'), title: 'Rozdział 1', summary: '', scenes: [] }];
   if (!p.chapters.some(c => c.id === p.currentChapter)) p.currentChapter = p.chapters[0].id;
