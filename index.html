@@ -778,6 +778,16 @@ function usageLine(u) {
   return parts.join(' · ');
 }
 
+// Całe zdanie wokół zgłoszonego słowa: od poprzedniego końca zdania do następnego
+function sentenceAround(text, off, len) {
+  const before = text.slice(0, off), after = text.slice(off + len);
+  const startM = [...before.matchAll(/[.!?…]["”»]?\s+|\n+/g)].pop();
+  const start = startM ? startM.index + startM[0].length : 0;
+  const endM = after.match(/[.!?…]["”»]?(?=\s|$)|\n/);
+  const end = endM ? off + len + endM.index + (endM[0] === '\n' ? 0 : endM[0].length) : text.length;
+  const clip = (t, n, fromEnd) => t.length <= n ? t : (fromEnd ? '…' + t.slice(-n) : t.slice(0, n) + '…');
+  return { pre: clip(text.slice(start, off), 140, true), post: clip(text.slice(off + len, end), 140, false) };
+}
 async function languageTool(text) {
   const body = new URLSearchParams({ text: text.slice(0, 18000), language: 'pl-PL' });
   const r = await fetch('https://api.languagetool.org/v2/check', { method: 'POST', body });
@@ -786,6 +796,7 @@ async function languageTool(text) {
   return (j.matches || []).map(m => ({
     off: m.offset, len: m.length, bad: text.substr(m.offset, m.length), rule: m.rule?.issueType || '',
     ctx: text.slice(Math.max(0, m.offset - 25), m.offset + m.length + 25).replace(/\s+/g, ' '),
+    ...sentenceAround(text, m.offset, m.length),
     msg: m.message, rep: (m.replacements || []).slice(0, 3).map(x => x.value),
   }));
 }
@@ -1287,7 +1298,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.6 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1710,7 +1721,7 @@ A.editorPass = async () => {
   const segs = diffHunks(orig, fixed), n = segs.filter(x => x.eq == null).length;
   S.ui = { segs, orig };
   const ltInfo = !S.settings.lt ? 'wyłączony' : S.ltFailed ? 'niedostępny' : lt.length + ' uwag';
-  const ltNotesHtml = ltNotes.length ? `<details class="card"><summary class="label" style="cursor:pointer">Uwagi LanguageTool bez gotowej poprawki (${ltNotes.length})</summary><div class="stack small" style="margin-top:8px">${ltNotes.map(x => `<div><b>${esc(x.bad)}</b>: ${esc(x.msg)} <span class="muted">(…${esc(x.ctx)}…)</span></div>`).join('')}</div></details>` : '';
+  const ltNotesHtml = ltNotes.length ? `<details class="card"><summary class="label" style="cursor:pointer">Uwagi LanguageTool bez gotowej poprawki (${ltNotes.length})</summary><div class="stack small" style="margin-top:8px">${ltNotes.map(x => `<div><span class="muted">${esc(x.pre)}</span><b>${esc(x.bad)}</b><span class="muted">${esc(x.post)}</span><br>→ ${esc(x.msg)}</div>`).join('')}</div></details>` : '';
   const foot = `${ltNotesHtml}${failed ? `<div class="banner warn small">Redaktor nie sprawdził ${failed} z ${chunks.length} fragmentów: ${esc(lastErr?.message || '')}</div>` : ''}<span class="hint mono">${esc(usageLine(usage))} · fragmentów: ${chunks.length}${failed ? ` (nieudanych: ${failed})` : ''} · ciągłość całej sceny: ${cont.failed ? 'nie udała się' : 'sprawdzona'} · LanguageTool: ${ltInfo}</span>`;
   if (!n) return setSheet(`${notesHtml}<div class="banner info">Redaktor nie znalazł nic do poprawy.</div>${missed.length ? `<div class="banner warn small">Redaktor zgłosił ${missed.length} uwag, ale nie dało się ich dopasować do tekstu: ${missed.map(m => esc('„' + m.find + '” → „' + m.replace + '”')).join('; ')}</div>` : ''}${foot}`);
   setSheet(`${notesHtml}<div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
