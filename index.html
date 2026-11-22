@@ -415,7 +415,7 @@ const ENDINGS = {
   dialog: { label: 'Na dialogu', ins: 'Zakończ scenę czyjąś kwestią dialogową. Po niej już nic: żadnego komentarza narratora ani opisu reakcji.' },
   akcja: { label: 'W ruchu', ins: 'Zakończ w trakcie konkretnej czynności fizycznej, która jeszcze trwa. Bez domykania i bez refleksji.' },
   obraz: { label: 'Obraz', ins: 'Zakończ jednym konkretnym, zmysłowym detalem (dźwięk, światło, przedmiot), nie interpretując go.' },
-  zwrot: { label: 'Zwrot', ins: 'W ostatnich zdaniach wprowadź nową informację albo zdarzenie, które zmienia sytuację. Nie komentuj go.' },
+  zwrot: { label: 'Zwrot', ins: 'W ostatnich zdaniach wprowadź NOWĄ informację albo zdarzenie, którego ani postać, ani czytelnik się nie spodziewali i które zmienia sytuację (ujawnienie, wiadomość, czyjeś pojawienie się, odkrycie). Skutek czegoś, przed czym ktoś już wcześniej w scenie ostrzegał, NIE jest zwrotem. Nie komentuj go.' },
   ciecie: { label: 'Ostre cięcie', ins: 'Urwij scenę w pół sytuacji, zanim cokolwiek się domknie, jak cięcie montażowe.' },
   cisza: { label: 'Zawieszenie', ins: 'Zostaw sytuację niedomkniętą: pytanie bez odpowiedzi, gest bez reakcji. Nikt niczego nie podsumowuje.' },
 };
@@ -427,7 +427,7 @@ function newProject(title) {
   const ch = { id: uid('c'), title: 'Rozdział 1', summary: '', scenes: [] };
   return {
     id: uid('p'), title: title || 'Nowa opowieść', created: Date.now(), updated: Date.now(),
-    style: { guide: '', sample: '' }, banned: DEFAULT_BANNED.join('\n'), tics: { detect: true, budget: 1 },
+    style: { guide: '', sample: '', facts: '' }, banned: DEFAULT_BANNED.join('\n'), tics: { detect: true, budget: 1 },
     characters: [], events: [], threads: [], chapters: [ch], currentChapter: ch.id,
     dataset: { sft: [], dpo: [] }, book: defaultBook(),
   };
@@ -874,6 +874,7 @@ Zasady:
 function memoryBlock(p, sc, present) {
   const B = [];
   if (p.style.guide.trim()) B.push('## STYL I ŚWIAT\n' + p.style.guide.trim());
+  if ((p.style.facts || '').trim()) B.push('## REALIA I FAKTY TECHNICZNE (twarde fakty: trzymaj się ich dokładnie; gdy czegoś nie wiesz na pewno, nie podawaj konkretnych liczb)\n' + p.style.facts.trim());
   if (p.style.sample.trim()) B.push('## PRÓBKA STYLU AUTORA (naśladuj rytm i słownictwo; nie kopiuj treści, obrazów ani pierwszego zdania)\n' + p.style.sample.trim().slice(0, 7000));
   const pres = present.map(charById).filter(Boolean);
   if (pres.length) B.push('## POSTACIE W SCENIE\n' + pres.map(c => charCard(c, true)).join('\n\n'));
@@ -910,7 +911,8 @@ function buildWriterMessages(p, sc, mode, extra = {}) {
   if (mode === 'scene') {
     const e = ENDINGS[extra.ending];
     parts.push(`# ZADANIE
-Napisz NOWĄ scenę „${sc.title}”, około ${sc.words} słów. Nie powtarzaj ani nie przepisuj poprzedniej sceny: ta scena dzieje się później i wnosi coś nowego.${startsNote}
+Napisz NOWĄ scenę „${sc.title}”. Długość to wymaganie: co najmniej ${Math.round(sc.words * 0.9)} słów, celuj w ${sc.words}. Żeby ją wypełnić, rozpisz scenę na 4–6 wyraźnych etapów (przyjście, rozmowa, napięcie, zmiana) i daj każdemu dialog, gesty i konkret. Nie streszczaj.
+Realia: nie mieszaj świata symulatora z prawdziwym samochodem bez wyjaśnienia w tekście, co dokładnie się przenosi, a co nie. Podawaj jednostki (np. PSI w grze, bar w aucie). Postacie mogą się mylić, ale wtedy tekst ma to pokazać. Nie powtarzaj ani nie przepisuj poprzedniej sceny: ta scena dzieje się później i wnosi coś nowego.${startsNote}
 Plan sceny: ${sc.plan.trim() || '(brak, poprowadź akcję naturalnie dalej, korzystając z otwartych wątków)'}
 Postacie obecne: ${whoNames(present).join(', ') || 'według planu'}.
 Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończyły się tak. Nie kończ podobnie ani podobną konstrukcją:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
@@ -934,6 +936,7 @@ const EDITOR_SYS = `Jesteś korektorem i redaktorem językowym polskiej prozy. P
 - kalki z angielskiego i niepolskie konstrukcje,
 - zdania niegramatyczne albo nielogiczne (minimalną ingerencją),
 - powtórzenia tego samego słowa w bliskim sąsiedztwie.
+Sprawdź KAŻDĄ frazę rzeczownikową pod kątem zgodności przypadka, liczby i rodzaju (np. „zamiast czystego pulpitów” → „zamiast czystych pulpitów”, „z wąskiego kręgów” → „z wąskiego kręgu”) oraz pisownię wyrażeń (np. „wczoraj popołudniu” → „wczoraj po południu”). Takie błędy poprawiaj zawsze.
 NIE zmieniasz fabuły, kolejności, stylu, tonu, długości ani treści dialogów (poza błędami). Nie dodajesz zdań. Zachowujesz podział na akapity.
 Zwróć cały poprawiony tekst i nic więcej.`;
 
@@ -1115,10 +1118,12 @@ function viewScene(p, sc) {
   </div></details>
   <div id="ticBanner"></div>
   <textarea class="prose auto ${busy ? 'streaming' : ''}" id="sceneText" data-f="scene.text" placeholder="Tu pojawi się scena. Możesz też pisać sam: model i archiwista pracują na tym, co tu jest." aria-label="Tekst sceny">${esc(sc.text)}</textarea>
+  ${hasText && !busy && sc.endingUsed && wc(sc.text) < sc.words * 0.8 ? `<div class="banner warn"><div><b>Za krótka:</b> ${fmtN(wc(sc.text))} z zamówionych ~${fmtN(sc.words)} słów.</div><div><button class="btn sm" data-a="expand">Rozwiń do ~${fmtN(sc.words)} słów</button></div></div>` : ''}
   <div class="meta-line"><span>${fmtN(wc(sc.text))} słów</span>${sc.endingUsed ? `<span>Zakończenie: ${ENDINGS[sc.endingUsed]?.label || ''}</span>` : ''}${sc.usage ? `<span class="mono">${esc(usageLine(sc.usage))}</span>` : ''}</div>
   ${busy ? `<button class="btn block" data-a="stop"><span class="spinner"></span> Zatrzymaj</button>` : `
   <div class="actions">
     <button class="btn" data-a="editorPass" ${hasText ? '' : 'disabled'}>Redakcja</button>
+    <button class="btn" data-a="factCheck" ${hasText ? '' : 'disabled'}>Kontrola realiów</button>
     <button class="btn" data-a="endings" ${hasText ? '' : 'disabled'}>Inne zakończenia</button>
     <button class="btn" data-a="continue" ${hasText ? '' : 'disabled'}>Dopisz dalej</button>
     ${sc.history?.length ? `<button class="btn" data-a="undo">Cofnij zmianę</button>` : ''}
@@ -1188,6 +1193,10 @@ function viewStyle() {
   <div class="card">
     <label class="field"><span>Tytuł opowieści</span><input type="text" id="projTitle" data-f="project.title" value="${esc(p.title)}"></label>
     <label class="field"><span>Wytyczne stylu i świata</span><textarea class="auto" id="styleGuide" data-f="style.guide" placeholder="Narrator, czas, POV, ton, gatunek, realia, czego unikać.">${esc(p.style.guide)}</textarea></label>
+  </div>
+  <div class="card">
+    <label class="field"><span>Realia i fakty techniczne</span><textarea class="auto" id="styleFacts" data-f="style.facts" placeholder="Np.: Setup w simracingu (GT3, Spa) nie przenosi się 1:1 na drogowe M4. Ciśnienia w grze podawane na gorąco w PSI (GT3: ok. 26–27,5 PSI), w drogowym aucie na zimno w barach (ok. 2,2–2,6). Kacper ma M4 F82, seryjne zawieszenie.">${esc(p.style.facts || '')}</textarea></label>
+    <span class="hint">Twarde fakty, których model ma się trzymać. Kontrola realiów też z nich korzysta.</span>
   </div>
   <div class="card">
     <label class="field"><span>Próbka Twojej prozy</span><textarea class="auto" id="styleSample" data-f="style.sample" placeholder="Wklej 1–3 strony swojego tekstu. Model naśladuje rytm i słownictwo, nie treść.">${esc(p.style.sample)}</textarea></label>
@@ -1274,7 +1283,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.5.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.6 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1483,6 +1492,51 @@ A.cutTail = () => {
   pushHistory(sc); const ps = splitParas(sc.text); sc.text = joinParas(ps.slice(0, ps.length - shortTail)); saveProject(); render(); toast('Ucięto końcową puentę.');
 };
 
+A.expand = async () => {
+  if (GEN) return;
+  const p = S.project, sc = curScene(), have = wc(sc.text);
+  const msgs = buildWriterMessages(p, sc, 'scene', { ending: sc.endingUsed || 'cliff' });
+  msgs[1].content += `\n\n# OBECNA WERSJA SCENY (${have} słów)\n${sc.text}\n\n# ZADANIE ZAMIAST POWYŻSZEGO\nScena jest za krótka. Zwróć CAŁĄ scenę rozwiniętą do ok. ${sc.words} słów: zachowaj wszystkie wydarzenia, kolejność, początek i zakończenie, ale rozbuduj środek o dialog, gesty, konkretne szczegóły i reakcje postaci. Nie dopisuj nowego zakończenia ani podsumowania. Zwróć tylko tekst sceny.`;
+  pushHistory(sc);
+  const r = await streamInto(sc, msgs);
+  if (r) { if (sc.gen) sc.gen.output = sc.text; toast(`Rozwinięto do ${fmtN(wc(sc.text))} słów.`); saveProject(); render(); }
+};
+const FACT_SYS = `Jesteś redaktorem merytorycznym powieści i konsultantem technicznym (motoryzacja, simracing, fizyka, realia polskie). Szukasz w scenie błędów merytorycznych i logicznych, które przeoczyłby czytelnik niezaznajomiony z tematem: pomieszane konteksty (gra a prawdziwe auto), złe lub brakujące jednostki, liczby nierealne w danym kontekście, zbyt kategoryczne wnioski, sprzeczności z kanonem i z tym, co postać może wiedzieć, oraz niespełnione wymagania zadania (długość, typ zakończenia). Nie oceniasz stylu ani gramatyki. Zwracasz WYŁĄCZNIE JSON.`;
+A.factCheck = async () => {
+  const p = S.project, sc = curScene(), present = sc.who || [];
+  openSheet('Kontrola realiów', loader('Konsultant czyta scenę i sprawdza fakty…'));
+  const e = sc.endingUsed ? ENDINGS[sc.endingUsed] : null;
+  const user = `${memoryBlock(p, sc, present)}\n\n# WYMAGANIA SCENY\nPlan: ${sc.plan || '—'}\nZamówiona długość: ok. ${sc.words} słów (jest ${wc(sc.text)}).\n${e ? `Zamówione zakończenie (${e.label}): ${e.ins}` : ''}\n\n# SCENA\n${sc.text}\n\nZwróć JSON: {"issues":[{"quote":"dokładny cytat ze sceny (krótki)","problem":"co jest nie tak i dlaczego","fix":"jak to naprawić, konkretnie"}],"ending_ok":true,"ending_note":"czy zakończenie spełnia wymaganie; jeśli nie, dlaczego"}. Maksymalnie 8 najważniejszych problemów. Pusta lista, jeśli nie ma.`;
+  let r;
+  try { r = await llm('writer', [{ role: 'system', content: FACT_SYS }, { role: 'user', content: user }], { json: true, maxTokens: 6000, temp: 0.2 }); }
+  catch (err) { setSheet(`<div class="banner bad">${esc(err.message)}</div>`); throw err; }
+  const d = parseJSON(r.text);
+  if (!d) return setSheet(`<div class="banner bad">Konsultant zwrócił coś, czego nie umiem odczytać.</div><pre class="ctx">${esc(r.text.slice(0, 2000))}</pre>`);
+  const issues = (Array.isArray(d.issues) ? d.issues : []).filter(i => i && i.problem);
+  S.ui = { issues, endingOk: d.ending_ok !== false, endingNote: String(d.ending_note || '') };
+  const endBox = !S.ui.endingOk ? `<div class="banner warn"><div><b>Zakończenie nie spełnia wymagania.</b> ${esc(S.ui.endingNote)}</div><div><button class="btn sm" data-a="endings">Daj 3 inne zakończenia</button></div></div>` : '';
+  if (!issues.length) return setSheet(endBox + `<div class="banner info">Nie znalazłem błędów merytorycznych.</div><span class="hint mono">${esc(usageLine(r.usage))}</span>`);
+  setSheet(`${endBox}<div class="card">${issues.map((i, k) => `<label class="xitem"><input type="checkbox" data-fx="${k}" checked><span class="x">${i.quote ? `<i>„${esc(i.quote)}”</i><br>` : ''}<b>${esc(i.problem)}</b>${i.fix ? `<br><span class="muted small">Poprawka: ${esc(i.fix)}</span>` : ''}</span></label>`).join('')}</div>
+    <span class="hint mono">${esc(usageLine(r.usage))}</span>
+    <div class="sheet-foot"><button class="btn" data-a="closeSheet">Zamknij</button><button class="btn primary" data-a="applyFacts">Popraw zaznaczone</button></div>`);
+};
+A.applyFacts = async () => {
+  const p = S.project, sc = curScene(), orig = sc.text;
+  const sel = $$('[data-fx]').filter(i => i.checked).map(i => S.ui.issues[Number(i.dataset.fx)]);
+  if (!sel.length) return toast('Zaznacz co najmniej jeden problem.', true);
+  setSheet(loader('Poprawiam tylko wskazane miejsca…'));
+  const list = sel.map((i, k) => `${k + 1}. ${i.quote ? '„' + i.quote + '”: ' : ''}${i.problem}${i.fix ? ' → ' + i.fix : ''}`).join('\n');
+  const user = `${(p.style.facts || '').trim() ? 'REALIA:\n' + p.style.facts.trim() + '\n\n' : ''}PROBLEMY DO NAPRAWIENIA:\n${list}\n\nSCENA:\n${orig}\n\nPopraw WYŁĄCZNIE miejsca związane z powyższymi problemami, minimalną zmianą (możesz dopisać krótkie zdanie wyjaśnienia, jeśli jest potrzebne). Reszta tekstu ma zostać słowo w słowo. Zachowaj podział na akapity. Zwróć cały tekst sceny i nic więcej.`;
+  let r;
+  try { r = await llm('writer', [{ role: 'system', content: 'Jesteś redaktorem merytorycznym polskiej prozy. Wprowadzasz tylko wskazane poprawki.' }, { role: 'user', content: user }], { temp: 0.3 }); }
+  catch (err) { setSheet(`<div class="banner bad">${esc(err.message)}</div>`); throw err; }
+  const fixed = cleanOutput(r.text), segs = diffHunks(orig, fixed), n = segs.filter(x => x.eq == null).length;
+  S.ui = { segs, orig };
+  if (!n) return setSheet('<div class="banner info">Model nie wprowadził zmian.</div>');
+  setSheet(`<div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'zmiana' : 'zmian'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
+    <div class="diff" id="diffBox">${diffHtml()}</div><span class="hint mono">${esc(usageLine(r.usage))}</span>
+    <div class="sheet-foot"><button class="btn" data-a="closeSheet">Anuluj</button><button class="btn primary" data-a="applyHunks">Zastosuj zaznaczone</button></div>`);
+};
 A.newOpening = async () => {
   if (GEN) return;
   const p = S.project, sc = curScene(), ps = splitParas(sc.text);
@@ -1564,12 +1618,12 @@ A.pickEnding = id => {
 A.editorPass = async () => {
   const sc = curScene(); const orig = sc.text;
   openSheet('Redakcja', loader(S.settings.lt ? 'LanguageTool i redaktor czytają scenę…' : 'Redaktor czyta scenę…'));
-  let hints = '';
+  let hints = ''; S.ltFailed = false;
   if (S.settings.lt) {
     try {
       const m = await languageTool(orig);
       hints = m.slice(0, 60).map(x => `- „${x.ctx}”: ${x.msg}${x.rep.length ? ' → ' + x.rep.join(' / ') : ''}`).join('\n');
-    } catch { /* LT niedostępny: idziemy dalej bez niego */ }
+    } catch { hints = ''; S.ltFailed = true; /* LT niedostępny: idziemy dalej bez niego */ }
   }
   const user = (hints ? `Automatyczny korektor (LanguageTool) zgłosił możliwe problemy. Część zgłoszeń może być fałszywa, oceń je sam:\n${hints}\n\n` : '') + 'TEKST DO KOREKTY:\n\n' + orig;
   let r;
@@ -1584,7 +1638,7 @@ A.editorPass = async () => {
   setSheet(`${ratio < 0.8 || ratio > 1.25 ? '<div class="banner warn"><b>Uwaga:</b> redaktor mocno zmienił długość tekstu. Przejrzyj zmiany dokładnie.</div>' : ''}
     <div class="row"><span class="grow"><b>${n}</b> ${n === 1 ? 'poprawka' : 'poprawek'}. Stuknij zmianę, żeby ją odrzucić.</span><button class="btn sm" data-a="hunksAll" data-id="1">Wszystkie</button><button class="btn sm" data-a="hunksAll" data-id="0">Żadne</button></div>
     <div class="diff" id="diffBox">${diffHtml()}</div>
-    <span class="hint mono">${esc(usageLine(r.usage))}${hints ? ' · LanguageTool: ' + hints.split('\n').length + ' uwag' : ''}</span>
+    <span class="hint mono">${esc(usageLine(r.usage))} · LanguageTool: ${!S.settings.lt ? 'wyłączony' : S.ltFailed ? 'niedostępny' : (hints ? hints.split('\n').length + ' uwag' : '0 uwag')}</span>
     <div class="sheet-foot"><button class="btn" data-a="closeSheet">Anuluj</button><button class="btn primary" data-a="applyHunks">Zastosuj zaznaczone</button></div>`);
 };
 function diffHtml() { return S.ui.segs.map((s, i) => s.eq != null ? esc(s.eq) : `<button class="hunk ${s.on ? '' : 'off'}" data-a="toggleHunk" data-id="${i}" aria-pressed="${s.on}">${s.del ? `<del>${esc(s.del)}</del>` : ''}${s.ins ? `<ins>${esc(s.ins)}</ins>` : ''}</button>`).join(''); }
@@ -2368,7 +2422,7 @@ A.syncNow = async (id, b) => {
 
 /* ============================== Start ============================== */
 function migrate(p) {
-  p.style = p.style || { guide: '', sample: '' };
+  p.style = p.style || { guide: '', sample: '' }; if (p.style.facts == null) p.style.facts = '';
   p.tics = p.tics || { detect: true, budget: 1 };
   p.dataset = p.dataset || { sft: [], dpo: [] };
   p.book = { ...defaultBook(), ...(p.book || {}) };
