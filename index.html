@@ -1278,7 +1278,10 @@ function viewScene(p, sc) {
       <label class="field grow"><span>Gdzie i kiedy (opcjonalnie)</span><input type="text" id="sceneWhere" data-f="scene.where" value="${esc(sc.where || '')}" placeholder="Np. dwa dni później, parking pod galerią"></label></div>
     <div class="row"><label class="field grow"><span>Zakończenie</span><select id="sceneEnding" data-f="scene.ending">${endOpts}</select></label>
       <label class="field grow"><span>Długość</span><select id="sceneWords" data-f="scene.words">${lenOpts}</select></label>
-      <label class="field grow"><span>Model</span><select id="engineQuick">${Object.entries(ENGINES).map(([k, e]) => `<optgroup label="${e.label}${PROVIDERS[e.prov].manual || S.settings[PROVIDERS[e.prov].keyField] ? '' : ' (brak klucza)'}">${e.models.map(m => `<option value="${k}:${m.id}" ${S.settings.engine === k && curEngineModel().id === m.id ? 'selected' : ''}>${esc(m.name)} · ${esc(m.c)}</option>`).join('')}</optgroup>`).join('')}</select></label></div>
+      <label class="field grow"><span>Model</span><select id="engineQuick">${(() => { const W = S.settings.roles.writer, E = ENGINES[S.settings.engine], M = curEngineModel();
+        const chipOk = E && E.prov === W.provider && (M.m.includes(W.model) || M.m.some(x => W.model.startsWith(x)));
+        const own = chipOk ? '' : `<option value="" selected>Ustawiony ręcznie: ${esc(W.model || '—')} (${esc(PROVIDERS[W.provider]?.name || W.provider)})</option>`;
+        return own + Object.entries(ENGINES).map(([k, e]) => `<optgroup label="${e.label}${PROVIDERS[e.prov].manual || S.settings[PROVIDERS[e.prov].keyField] ? '' : ' (brak klucza)'}">${e.models.map(m => `<option value="${k}:${m.id}" ${chipOk && S.settings.engine === k && M.id === m.id ? 'selected' : ''}>${esc(m.name)} · ${esc(m.c)}</option>`).join('')}</optgroup>`).join(''); })()}</select></label></div>
     <div class="row">
       <button class="btn primary grow" data-a="generate" ${busy ? 'disabled' : ''}>${hasText ? 'Napisz od nowa' : 'Napisz scenę'}</button>
       <button class="btn grow" data-a="ideas" ${busy ? 'disabled' : ''}>Pomysły</button>
@@ -1411,7 +1414,7 @@ function viewSettings() {
     <div class="label">Model</div>
     <div class="chips">${Object.entries(ENGINES).map(([k, e]) => `<button class="chip" data-a="setEngine" data-id="${k}" aria-pressed="${st.engine === k}">${e.label}</button>`).join('')}</div>
     <div class="label">Model pisarza</div>
-    <div class="mchips">${E.models.map(m => `<button class="mchip" data-a="setPick" data-id="${m.id}" aria-pressed="${curEngineModel().id === m.id}"><b>${esc(m.name)}</b><span>${esc(m.c)} / scena</span><span>${esc(m.d)}</span></button>`).join('')}</div>
+    <div class="mchips">${E.models.map(m => `<button class="mchip" data-a="setPick" data-id="${m.id}" aria-pressed="${curEngineModel().id === m.id && R.writer.provider === E.prov && (m.m.includes(R.writer.model) || m.m.some(x => R.writer.model.startsWith(x)))}"><b>${esc(m.name)}</b><span>${esc(m.c)} / scena</span><span>${esc(m.d)}</span></button>`).join('')}</div>
     ${E.prov === 'manual' ? `<label class="field"><span>Redakcja i pamięć</span><select id="manualHelpers" data-f="settings.manualHelpers">
       ${[['manual', 'Też ręcznie przez czat'], ['claude', 'Claude Haiku przez API (grosze)'], ['openai', 'GPT-6 Luna przez API (grosze)'], ['gemini', 'Gemini Flash-Lite przez API']].map(([v, l]) => `<option value="${v}" ${(st.manualHelpers || 'manual') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${st.manualHelpers && st.manualHelpers !== 'manual' ? keyInput({ claude: 'anthropic', openai: 'openai', gemini: 'gemini' }[st.manualHelpers]) : ''}` : keyInput(E.prov)}
@@ -1463,7 +1466,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1484,7 +1487,7 @@ document.addEventListener('input', e => {
   if (el.closest && el.closest('#sheet') && el.id !== 'modelSearch') SHEET_DIRTY = true;
   if (el.id === 'chapterSel') { S.project.currentChapter = el.value; saveProject(); render(); return; }
   if (el.id === 'evFilter') { S.evFilter = el.value; render(); return; }
-  if (el.id === 'engineQuick') { const [eng, mid] = el.value.split(':'); S.settings.engine = eng; S.settings.pick = { ...(S.settings.pick || {}), [eng]: mid }; applyEngine(); toast('Pisze: ' + curEngineModel().name); return; }
+  if (el.id === 'engineQuick') { if (!el.value) return; const [eng, mid] = el.value.split(':'); S.settings.engine = eng; S.settings.pick = { ...(S.settings.pick || {}), [eng]: mid }; applyEngine(); toast('Pisze: ' + curEngineModel().name); return; }
   if (el.id === 'modelSearch') { renderModelList(el.value); return; }
   const f = el.dataset.f; if (!f) return;
   const dot = f.lastIndexOf('.'); const scope = f.slice(0, dot), key = f.slice(dot + 1);
