@@ -944,6 +944,7 @@ function buildWriterMessages(p, sc, mode, extra = {}) {
   const prev = scenesBefore(p, sc).filter(x => x.s.text).slice(-1)[0];
   const jump = sc.cont === 'jump';
   if (prev && mode !== 'ideas' && (!jump || mode !== 'scene')) parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(-900));
+  if (prev?.s.endState && mode !== 'ideas') parts.push('# STAN ŚWIATA NA KOŃCU POPRZEDNIEJ SCENY (kto gdzie jest; trzymaj się tego)\n' + prev.s.endState);
   const ends = lastEndings(p, sc);
   const starts = lastOpenings(p, sc);
   const startsNote = starts.length ? `\nPoprzednie sceny zaczynały się tak. Zacznij INACZEJ: inne pierwsze zdanie, inny obraz, inny punkt wejścia (np. od środka dialogu, od ruchu, od innego miejsca czy zmysłu):\n${starts.map(x => '- „' + x + '…”').join('\n')}` : '';
@@ -1004,6 +1005,7 @@ Zwróć JSON dokładnie w tym kształcie:
 {
   "summary": "streszczenie sceny w 2–4 zdaniach",
   "title": "krótki tytuł sceny, 1–4 słowa, konkretny, bez cudzysłowu",
+  "end_state": "gdzie jest każda postać ze sceny na jej końcu i co robi, 1–3 zdania. Jeśli scena nie mówi tego wprost, wybierz NAJBARDZIEJ LOGICZNY stan (np. gdy gospodarz wychodzi z mieszkania i wyprasza gości, goście też wychodzą) i dopisz (domyślnie)",
   "events": [{"text": "fakt: co się stało", "who": ["Imię"], "consequence": "skutek albo pusty tekst", "important": true}],
   "knowledge": [{"character": "Imię", "learned": "czego ta postać dowiedziała się w tej scenie"}],
   "character_updates": [{"character": "Imię", "change": "trwała zmiana: relacja, stan, decyzja"}],
@@ -1336,7 +1338,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.1 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.9.2 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1579,6 +1581,7 @@ A.expand = async () => {
 };
 const FACT_SYS = `Jesteś redaktorem merytorycznym powieści i konsultantem technicznym (motoryzacja, simracing, fizyka, realia polskie). Czytasz scenę zdanie po zdaniu i szukasz:
 1. czynności fizycznie niemożliwych i sprzeczności w scenie (np. „gestykulował wolną ręką, nie zdejmując jej z kierownicy”; przedmiot odłożony, a potem trzymany w dłoni; postać, która wyszła, a nadal mówi w pokoju),
+1b. zachowań, które nie mają sensu w danej sytuacji społecznej (np. obcy ludzie zostają sami w cudzym mieszkaniu, gdy gospodarz wychodzi i każe im wyjść; ktoś wchodzi do cudzego domu bez reakcji domownika; postać robi coś wbrew zdrowemu rozsądkowi bez powodu),
 2. błędów merytorycznych, które przeoczyłby laik: pomieszane konteksty (gra a prawdziwe auto), złe lub brakujące jednostki, nierealne liczby, zbyt kategoryczne wnioski,
 3. sprzeczności z kanonem i z tym, co postać może wiedzieć (pola WIE / NIE WIE),
 4. błędnego użycia sprzętu, narzędzi i terminów fachowych z dziedziny, o której jest scena (np. przedmiot używany niezgodnie z przeznaczeniem, dane pozyskane w niemożliwy sposób): sprawdź każdy termin fachowy z sekcją REALIA i z własną wiedzą,
@@ -1744,7 +1747,7 @@ const EDITOR_JSON_SYS = `Jesteś bardzo dokładnym korektorem i redaktorem polsk
 4. powtórzenia tego samego słowa w sąsiednich zdaniach.
 Nie poprawiasz stylu, który jest poprawny. Nie zmieniasz fabuły ani treści dialogów poza błędami. Nie ruszasz nazw własnych, modeli aut, nicków i terminów technicznych (np. GT3, M4 F82, Stavelot, camber).
 Zwracasz WYŁĄCZNIE JSON: {"fixes":[{"find":"dokładny fragment z tekstu, 3–15 słów, skopiowany znak w znak","replace":"ten sam fragment po poprawce","why":"krótko: rodzaj błędu"}]}. Jeśli nie ma błędów: {"fixes":[]}.`;
-const CONTINUITY_SYS = `Jesteś redaktorem ciągłości. Czytasz CAŁĄ scenę od początku do końca i śledzisz stan świata: gdzie jest każda postać, w jakiej pozycji (siedzi, stoi), co trzyma w rękach i gdzie odłożyła przedmioty, co jest włączone lub otwarte (ekran, okno, stream, telefon), pora dnia, kto co wie i kto już wyszedł. Szukasz WYŁĄCZNIE sprzeczności rozciągniętych na kilka zdań lub akapitów (np. postać odkłada telefon, a później trzyma go w dłoni, choć go nie podniosła; wychodzi z pokoju i nagle w nim siedzi; zamyka okno, które potem znowu ogląda). Gramatyki i stylu nie poprawiasz.
+const CONTINUITY_SYS = `Jesteś redaktorem ciągłości. Czytasz CAŁĄ scenę od początku do końca i śledzisz stan świata: gdzie jest każda postać, w jakiej pozycji (siedzi, stoi), co trzyma w rękach i gdzie odłożyła przedmioty, co jest włączone lub otwarte (ekran, okno, stream, telefon), pora dnia, kto co wie i kto już wyszedł. Szukasz WYŁĄCZNIE sprzeczności rozciągniętych na kilka zdań lub akapitów (np. postać odkłada telefon, a później trzyma go w dłoni, choć go nie podniosła; wychodzi z pokoju i nagle w nim siedzi; zamyka okno, które potem znowu ogląda) oraz stanów końcowych bez sensu (np. gospodarz wychodzi z mieszkania, a goście, których wyprosił, zostają w nim sami). Gramatyki i stylu nie poprawiasz.
 Zwracasz WYŁĄCZNIE JSON: {"fixes":[{"find":"dokładny fragment z tekstu, 3–15 słów, skopiowany znak w znak","replace":"ten fragment po minimalnej poprawce, która usuwa sprzeczność","why":"krótko: co się nie zgadza"}],"notes":["sprzeczność, której nie da się naprawić jednym fragmentem"]}. Jeśli wszystko się zgadza: {"fixes":[],"notes":[]}.`;
 function protectedWords(p) {
   const set = new Set();
@@ -1853,6 +1856,7 @@ function normalizeExtract(d) {
   return {
     summary: String(d.summary || ''),
     title: String(d.title || '').replace(/[„”"]/g, '').trim().slice(0, 60),
+    end_state: String(d.end_state || '').trim(),
     events: arr(d.events).filter(e => e && e.text),
     knowledge: arr(d.knowledge).filter(k => k && k.character && k.learned),
     character_updates: arr(d.character_updates).filter(k => k && k.character && k.change),
@@ -1869,6 +1873,7 @@ function reviewHtml() {
   const thText = id => S.project.threads.find(t => t.id === id)?.text || id;
   return `${x.continuity.length ? `<div class="banner warn"><b>Możliwe błędy ciągłości</b>${x.continuity.map(c => '<div class="small">• ' + esc(c) + '</div>').join('')}<span class="small">Popraw scenę albo zatwierdź, jeśli to zamierzone.</span></div>` : ''}
   <div class="card"><div class="label">Streszczenie sceny</div><textarea class="auto" id="xSummary">${esc(x.summary)}</textarea></div>
+  <div class="card"><div class="label">Stan na końcu sceny: kto gdzie jest</div><textarea class="auto" id="xEnd">${esc(x.end_state || '')}</textarea><span class="hint">Następna scena zacznie od tego stanu. Popraw, jeśli coś jest nielogiczne.</span></div>
   ${sec('Nowe wydarzenia', 'events', x.events, e => `${esc(e.text)}${e.consequence ? `<br><span class="muted small">→ ${esc(e.consequence)}</span>` : ''}${e.who?.length ? `<br><span class="small muted">${esc(e.who.join(', '))}</span>` : ''}${e.important ? ' <span class="tag warn">ważne</span>' : ''}`)}
   ${sec('Czego dowiedziały się postacie', 'knowledge', x.knowledge, k => `<b>${esc(k.character)}</b>: ${esc(k.learned)}`)}
   ${sec('Zmiany postaci', 'character_updates', x.character_updates, k => `<b>${esc(k.character)}</b>: ${esc(k.change)}`)}
@@ -1892,6 +1897,7 @@ function applyExtraction(sc, x, picked) {
   x.threads_opened.forEach((t, i) => { if (ok('threads_opened', i)) p.threads.push({ id: uid('t'), text: t.text, who: ids(t.who), status: 'open', openedIn: ch.id }); });
   x.threads_closed.forEach((t, i) => { const th = p.threads.find(z => z.id === t.id); if (th && ok('threads_closed', i)) { th.status = 'closed'; th.resolution = t.resolution || ''; th.closedIn = ch.id; } });
   sc.summary = x.summary;
+  if (x.end_state) sc.endState = x.end_state;
   if (x.title && /^Scena \d+$/.test(sc.title)) sc.title = x.title; // automatyczny tytuł tylko zamiast domyślnego
   sc.status = 'accepted';
   sc.tickEnding = S.project.tics.detect && detectTics(sc.text, p).tics.some(t => t.id !== 'zakazane');
@@ -1907,6 +1913,7 @@ A.applyExtract = () => {
   const sc = curScene() || S.project.chapters.flatMap(c => c.scenes).find(s => s.id === S.ui.sceneId);
   const picked = new Set($$('[data-x]').filter(i => i.checked).map(i => i.dataset.x));
   S.ui.x.summary = $('#xSummary')?.value || S.ui.x.summary;
+  if ($('#xEnd')) S.ui.x.end_state = $('#xEnd').value.trim();
   applyExtraction(sc, S.ui.x, picked);
   saveProject(); closeSheet(); render(); toast('Zapisano w pamięci.');
 };
