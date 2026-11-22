@@ -608,6 +608,13 @@ const CLAUDE_MODELS = [
   { id: 'claude-haiku-5-5', name: 'Claude Haiku 5.5', pin: 0.1, pout: 0.5, note: 'Tani i szybki. Dobry na archiwistę.' },
   { id: 'claude-fable-5-1', name: 'Claude Fable 5.1', pin: 10, pout: 50, note: 'Najmocniejszy i najdroższy.' },
 ];
+function normFinish(f) {
+  f = String(f || '').toLowerCase();
+  if (!f) return 'none';
+  if (/length|max_tokens|max_output/.test(f)) return 'length';
+  if (/filter|safety|refusal|recitation|prohibited/.test(f)) return 'filter';
+  return 'stop';
+}
 async function llmAnthropic(role, messages, opt) {
   const st = S.settings, r = st.roles[role], key = (st.anKey || '').trim();
   if (!key) throw new UserError('Brak klucza Claude API. Dodaj go w Ustawieniach.');
@@ -632,7 +639,7 @@ async function llmAnthropic(role, messages, opt) {
     if (res.status === 400 && /credit|balance/i.test(t)) throw new UserError('Brak środków na koncie Claude API. Doładuj je w Console (Billing).');
     throw httpError(res.status, t);
   }
-  let text = '', inTok = 0, outTok = 0, cacheR = 0, cacheW = 0;
+  let text = '', inTok = 0, outTok = 0, cacheR = 0, cacheW = 0, finish = '';
   const takeUsage = u => { if (!u) return; if (u.input_tokens != null) inTok = u.input_tokens; if (u.output_tokens != null) outTok = u.output_tokens; if (u.cache_read_input_tokens != null) cacheR = u.cache_read_input_tokens; if (u.cache_creation_input_tokens != null) cacheW = u.cache_creation_input_tokens; };
   if (opt.stream && res.body) {
     const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '';
@@ -645,19 +652,20 @@ async function llmAnthropic(role, messages, opt) {
         let j; try { j = JSON.parse(line.slice(5).trim()); } catch { continue; }
         if (j.type === 'error') throw new UserError('Claude przerwał: ' + (j.error?.message || 'nieznany błąd'));
         if (j.type === 'message_start') takeUsage(j.message?.usage);
-        if (j.type === 'message_delta') takeUsage(j.usage);
+        if (j.type === 'message_delta') { takeUsage(j.usage); if (j.delta?.stop_reason) finish = j.delta.stop_reason; }
         if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') { text += j.delta.text; opt.onDelta?.(text); }
       }
     }
   } else {
     const j = await res.json();
     text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+    finish = j.stop_reason || '';
     takeUsage(j.usage);
   }
   const m = CLAUDE_MODELS.find(x => r.model.startsWith(x.id));
   const cost = m ? ((inTok + cacheW * 1.25 + cacheR * 0.1) * m.pin + outTok * m.pout) / 1e6 : null;
   if (cost) { st.spent = (st.spent || 0) + cost; saveSettings(); }
-  return { text, usage: { prompt_tokens: inTok + cacheR + cacheW, completion_tokens: outTok, cost }, model: r.model };
+  return { text, usage: { prompt_tokens: inTok + cacheR + cacheW, completion_tokens: outTok, cost }, model: r.model, finish: normFinish(finish) };
 }
 
 // Redaktor i archiwista: jeśli ich model jest niedostępny (np. darmowy klucz, brak billingu), użyj modelu pisarza.
@@ -722,7 +730,7 @@ async function llmRaw(role, messages, opt = {}) {
   }
   if (!res.ok) throw httpError(res.status, await res.text().catch(() => ''));
 
-  let text = '', usage = null;
+  let text = '', usage = null, finish = '';
   if (opt.stream && res.body) {
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -740,6 +748,7 @@ async function llmRaw(role, messages, opt = {}) {
         if (j.error) throw new UserError('Model przerwał: ' + (j.error.message || 'nieznany błąd'));
         const c = j.choices?.[0]?.delta?.content;
         if (c) { text += c; opt.onDelta?.(text); }
+        if (j.choices?.[0]?.finish_reason) finish = j.choices[0].finish_reason;
         if (j.usage) usage = j.usage;
       }
     }
@@ -747,10 +756,11 @@ async function llmRaw(role, messages, opt = {}) {
     const j = await res.json();
     if (j.error) throw new UserError('Model zwrócił błąd: ' + (j.error.message || ''));
     text = j.choices?.[0]?.message?.content || '';
+    finish = j.choices?.[0]?.finish_reason || '';
     usage = j.usage || null;
   }
   if (usage?.cost) { st.spent = (st.spent || 0) + usage.cost; saveSettings(); }
-  return { text, usage, model: r.model };
+  return { text, usage, model: r.model, finish: normFinish(finish) };
 }
 
 function cleanOutput(t) {
@@ -928,7 +938,7 @@ Plan sceny: ${sc.plan.trim() || '(brak, poprowadź akcję naturalnie dalej, korz
 Postacie obecne: ${whoNames(present).join(', ') || 'według planu'}.
 Zakończenie (${e.label}): ${e.ins}` + (ends.length ? `\nOstatnie sceny kończyły się tak. Nie kończ podobnie ani podobną konstrukcją:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
   } else if (mode === 'continue') {
-    parts.push('# TEKST SCENY DO TEJ PORY\n' + sc.text + `\n\n# ZADANIE\nKontynuuj tę scenę dokładnie od miejsca, w którym się urywa (około 300–500 słów). Nie powtarzaj tego, co już jest. Plan sceny: ${sc.plan.trim() || '—'}`);
+    parts.push('# TEKST SCENY DO TEJ PORY\n' + sc.text + `\n\n# ZADANIE\nKontynuuj tę scenę dokładnie od miejsca, w którym się urywa (około 300–500 słów). Jeśli tekst kończy się w pół słowa albo w pół zdania, zacznij od brakującej części tego słowa lub zdania (np. tekst kończy się „gdzie Kac”, więc zaczynasz od „per znowu…”). Nie powtarzaj niczego, co już jest. Nie zaczynaj od nowego akapitu, jeśli zdanie nie jest skończone. Plan sceny: ${sc.plan.trim() || '—'}`);
   } else if (mode === 'ending') {
     const e = extra.ending ? ENDINGS[extra.ending] : null;
     parts.push('# SCENA BEZ ZAKOŃCZENIA\n' + extra.base + `\n\n# ZADANIE\nNapisz WYŁĄCZNIE zakończenie tej sceny: 1–3 akapity, które płynnie kontynuują ostatnie zdanie. Nie powtarzaj tekstu, który już jest.` + (e ? `\nTyp zakończenia (${e.label}): ${e.ins}` : '') + (ends.length ? `\nNie kończ podobnie do poprzednich scen:\n${ends.map(x => '- „' + x + '”').join('\n')}` : ''));
@@ -1298,7 +1308,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.6 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.7.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1458,7 +1468,14 @@ A.undo = () => { const sc = curScene(); if (!sc.history?.length) return; sc.text
 
 // --- pisanie
 async function streamInto(sc, messages, { append } = {}) {
-  const base = append ? sc.text.replace(/\s+$/, '') + '\n\n' : '';
+  const prev = sc.text.replace(/\s+$/, '');
+  // dopisywanie: jeśli tekst urywa się w pół słowa albo zdania, doklej bez nowego akapitu
+  const joinTo = c => {
+    if (!append) return c;
+    if (/[.!?…"”»]$/.test(prev)) return prev + '\n\n' + c.replace(/^\s+/, '');
+    if (/\p{L}$/u.test(prev) && /^\p{Ll}/u.test(c)) return prev + c;           // „Kac” + „per…”
+    return prev + (/^[,.;:!?…]/.test(c) ? '' : ' ') + c.replace(/^\s+/, '');
+  };
   GEN = { ctrl: new AbortController() };
   render();
   const ta = $('#sceneText');
@@ -1467,13 +1484,16 @@ async function streamInto(sc, messages, { append } = {}) {
   addEventListener('scroll', onScroll, { passive: true });
   try {
     const r = await llm('writer', messages, {
-      stream: true, signal: GEN.ctrl.signal, onDelta: full => {
-        sc.text = base + cleanOutput(full); if (ta) { ta.value = sc.text; autosize(ta); }
+      stream: true, signal: GEN.ctrl.signal, maxTokens: Math.max(6000, (sc.words || 900) * 6), onDelta: full => {
+        sc.text = joinTo(cleanOutput(full)); if (ta) { ta.value = sc.text; autosize(ta); }
         if (follow) scrollTo(0, document.documentElement.scrollHeight);
       }
     });
-    sc.text = base + cleanOutput(r.text);
+    sc.text = joinTo(cleanOutput(r.text));
     sc.usage = r.usage;
+    if (r.finish === 'length') toast('Model doszedł do limitu długości odpowiedzi i urwał tekst. Użyj „Dopisz dalej”, dokończy od tego miejsca.', true);
+    else if (r.finish === 'filter') toast('Dostawca modelu przerwał tekst filtrem treści. Spróbuj przeformułować plan albo zmień model.', true);
+    else if (r.finish === 'none' && /\p{L}$/u.test(sc.text)) toast('Odpowiedź urwała się w pół słowa (zerwane połączenie?). Użyj „Dopisz dalej”.', true);
     return r;
   } catch (e) {
     if (e.name === 'AbortError') { toast('Zatrzymano.'); return null; }
