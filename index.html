@@ -1466,7 +1466,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.3 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -2270,13 +2270,38 @@ A.saveThread = id => {
 A.delThread = id => { S.project.threads = S.project.threads.filter(t => t.id !== id); saveProject(); closeSheet(); render(); };
 
 // --- ustawienia
+// Sprawdzenie połączenia bez generowania tekstu: tylko lista modeli albo dane klucza, więc nic nie kosztuje
 A.testConn = async (id, b) => {
   if (isManual('writer')) return toast('W trybie czatu nie ma czego sprawdzać: Atrament pokaże prompt do skopiowania przy pierwszym zadaniu.');
+  const st = S.settings, w = st.roles.writer, P = PROVIDERS[w.provider] || PROVIDERS.custom;
+  const key = (st[P.keyField] || '').trim();
+  if (P.keyField && !key && w.provider !== 'custom') return toast('Brak klucza ' + P.name + '. Wklej go wyżej.', true);
   b.disabled = true; b.innerHTML = '<span class="spinner"></span> Sprawdzam…';
   try {
-    const r = await llm('writer', [{ role: 'user', content: 'Odpowiedz jednym zdaniem po polsku: jaki jest najlepszy sposób, żeby zacząć opowiadanie?' }], { maxTokens: 3000 });
-    toast('Działa: ' + cleanOutput(r.text).slice(0, 140));
-  } finally { b.disabled = false; b.textContent = 'Sprawdź połączenie (Pisarz)'; }
+    let res, ids = [];
+    if (w.provider === 'anthropic') {
+      res = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' } });
+      if (res.ok) ids = ((await res.json()).data || []).map(m => m.id);
+    } else if (w.provider === 'openrouter') {
+      res = await fetch('https://openrouter.ai/api/v1/key', { headers: { Authorization: 'Bearer ' + key } });
+      if (res.ok) {
+        const d = (await res.json()).data || {};
+        const free = /:free$/.test(w.model);
+        const lim = d.limit == null ? 'bez limitu' : `limit klucza $${Number(d.limit).toFixed(2)}`;
+        toast(`Klucz działa (${lim}). Pisze: ${w.model}${free ? ', darmowy' : ', płatny'}. Nic nie zostało wygenerowane, test jest za darmo.`);
+        if (!free && d.limit === 0) toast('Uwaga: limit klucza to $0, a wybrany model jest płatny. Zapytania będą odrzucane.', true);
+        return;
+      }
+    } else {
+      const base = (P.base || st.customBase || '').trim().replace(/\/+$/, '');
+      res = await fetch(base + '/models', { headers: key ? { Authorization: 'Bearer ' + key } : {} });
+      if (res.ok) ids = ((await res.json()).data || []).map(m => String(m.id).replace(/^models\//, ''));
+    }
+    if (!res.ok) throw httpError(res.status, await res.text().catch(() => ''), w.provider);
+    const has = !ids.length || ids.some(x => x === w.model || x.startsWith(w.model) || w.model.startsWith(x));
+    toast(has ? `Klucz działa, model ${w.model} jest dostępny. Nic nie zostało wygenerowane, test jest za darmo.` : `Klucz działa, ale na tym koncie nie widzę modelu ${w.model}. Wybierz inny chip.`, !has);
+  } catch (e) { toastErr(e instanceof UserError ? e : new UserError('Nie udało się połączyć: ' + (e.message || e))); }
+  finally { b.disabled = false; b.textContent = 'Sprawdź połączenie'; }
 };
 async function loadModels() {
   if (S.models) return S.models;
