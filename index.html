@@ -723,17 +723,22 @@ async function llmAnthropic(role, messages, opt) {
 async function llm(role, messages, opt = {}) {
   try { return await llmRaw(role, messages, opt); }
   catch (e) {
-    const st = S.settings, r = st.roles[role], w = st.roles.writer;
-    const fallbackable = ([400, 402, 403, 404, 429].includes(e.status) || /Brak klucza|Nie wybrano modelu/.test(e.message || '')) && st.roles.writer.provider !== 'manual';
-    if (role === 'writer' || e.name === 'AbortError' || !fallbackable || (r.provider === w.provider && r.model === w.model)) throw e;
-    const saved = { ...r };
-    Object.assign(r, { provider: w.provider, model: w.model });
-    try {
-      const res = await llmRaw(role, messages, opt);
-      toast(`${ROLE_INFO[role].name}: ${saved.model} niedostępny, użyto ${w.model}. Zapamiętałem to.`);
-      saveSettings();
-      return res;
-    } catch (e2) { Object.assign(r, saved); throw e; }
+    const st = S.settings, r = st.roles[role];
+    const fallbackable = [400, 402, 403, 404, 429, 500, 503, 529].includes(e.status) || /Brak klucza|Nie wybrano modelu/.test(e.message || '');
+    if (role === 'writer' || e.name === 'AbortError' || !fallbackable) throw e;
+    // zapas: najpierw model od pamięci (tani, zwykle z dużym limitem), potem pisarz; ręcznych („przez czat”) nie bierzemy
+    const cands = ['memory', 'writer'].filter(k => k !== role).map(k => st.roles[k]).filter(c => c && c.provider !== 'manual' && !(c.provider === r.provider && c.model === r.model));
+    for (const c of cands) {
+      const saved = { ...r };
+      Object.assign(r, { provider: c.provider, model: c.model });
+      try {
+        const res = await llmRaw(role, messages, opt);
+        Object.assign(r, saved);
+        toast(`${ROLE_INFO[role].name}: ${saved.model} niedostępny (${String(e.message || '').slice(0, 60)}…), tym razem zrobił to ${c.model}.`);
+        return res;
+      } catch (e2) { Object.assign(r, saved); if (e2.name === 'AbortError') throw e2; }
+    }
+    throw e;
   }
 }
 /* ============================== Tryb ręczny: kopiuj-wklej przez czat ============================== */
@@ -1502,7 +1507,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.12 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.13 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
