@@ -1492,7 +1492,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.9 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.10 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1886,10 +1886,14 @@ ${ideas.map((x, i) => `${i + 1}. ${x.t}: ${x.p}`).join('\n')}
 Drobne niedopowiedzenia, które da się naturalnie dopisać w scenie, nie są błędem.
 
 Zwróć JSON: {"verdicts":[{"n":1,"ok":true,"problem":"jeśli ok=false: krótko, co się nie zgadza"}]} dla wszystkich ${ideas.length} propozycji.`;
-  const r = await llm(criticRole(), [{ role: 'system', content: CRITIC_SYS }, { role: 'user', content: user }], { json: true, temp: 0.1, maxTokens: 3000 });
+  const r = await llm(criticRole(), [{ role: 'system', content: CRITIC_SYS }, { role: 'user', content: user }], { json: true, temp: 0.1, maxTokens: 8000 });
   const d = parseJSON(r.text);
-  if (!Array.isArray(d?.verdicts)) throw new UserError('krytyk zwrócił odpowiedź, której nie umiem odczytać (to nie był poprawny JSON).');
-  const v = d.verdicts;
+  let v = Array.isArray(d?.verdicts) ? d.verdicts : null;
+  if (!v) {
+    // ratunek: odpowiedź ucięta albo z komentarzem; wyciągnij pojedyncze werdykty
+    v = [...(r.text || '').matchAll(/\{\s*"n"\s*:\s*(\d+)\s*,\s*"ok"\s*:\s*(true|false)(?:\s*,\s*"problem"\s*:\s*"((?:[^"\\]|\\.)*)")?/g)].map(m => ({ n: +m[1], ok: m[2] === 'true', problem: (m[3] || '').replace(/\\"/g, '"') }));
+    if (!v.length) throw new UserError('krytyk zwrócił odpowiedź, której nie umiem odczytać' + (r.finish === 'length' ? ' (ucięta: zabrakło miejsca na odpowiedź)' : '') + '. Początek: ' + (r.text || '(pusto)').slice(0, 160));
+  }
   ideas.forEach((x, i) => { const z = v.find(y => Number(y?.n) === i + 1); if (z && z.ok === false) x.bad = String(z.problem || 'niezgodne z kanonem'); });
   return r.usage;
 }
