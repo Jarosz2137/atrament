@@ -736,7 +736,8 @@ let MANUAL_Q = Promise.resolve(), MANUAL = null;
 function manualPrompt(role, messages, opt) {
   const sys = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
   const rest = messages.filter(m => m.role !== 'system').map(m => m.content).join('\n\n');
-  const tail = opt.json
+  const ownFormat = /Format odpowiedzi:/.test(rest);
+  const tail = ownFormat ? '' : opt.json
     ? '\n\n---\nODPOWIEDZ WYŁĄCZNIE poprawnym JSON-em (jeden obiekt), bez komentarzy i bez bloku kodu.'
     : '\n\n---\nOdpowiedz samym tekstem, o który proszę: bez wstępu, bez komentarzy, bez nagłówków i bez formatowania markdown.';
   return (sys ? '# INSTRUKCJE\n' + sys + '\n\n' : '') + rest + tail;
@@ -971,7 +972,7 @@ function charCard(c, full, lean = 0) {
     if (c.motivation) L.push('Motywacja: ' + c.motivation);
     if (c.voice) L.push('Sposób mówienia: ' + c.voice);
     if (c.relations) L.push('Relacje: ' + c.relations);
-    if (c.changes?.length) L.push('Co się z nią już stało (fakty z wcześniejszych scen): ' + c.changes.slice(lean ? -4 : -8).join('; '));
+    if (c.changes?.length) L.push('Co już się wydarzyło w życiu tej postaci (fakty z wcześniejszych scen): ' + c.changes.slice(lean ? -4 : -8).join('; '));
     if (c.knows?.length) L.push('WIE: ' + c.knows.slice(lean ? -6 : -15).join('; '));
     L.push('NIE WIE (nie może się tym posługiwać ani o tym wspominać): ' + (c.unknown || 'niczego, czego sama nie widziała ani nie usłyszała w scenach, w których była; nie zna ludzi, których nie poznała'));
     if ((c.arc || '').trim() && !lean) L.push('PLAN AUTORA NA PRZYSZŁOŚĆ (to się JESZCZE NIE wydarzyło; nie pisz tego jako faktu; prowadź fabułę powoli w tę stronę, nie przeskakuj do tego): ' + c.arc.trim());
@@ -1057,7 +1058,7 @@ function memoryBlock(p, sc, present, mode = 'full') {
   const before = ch.scenes.slice(0, ch.scenes.findIndex(s => s.id === sc.id));
   const recent = full ? before.length : (ideas ? 2 : 3);
   const older = before.slice(0, Math.max(0, before.length - recent)), last = before.slice(-recent);
-  if (older.length && !full) { const t = older.map(s => s.title).join(', '); H.push(`R${ci + 1}, wcześniej (${t}): ` + (ch.summary ? ch.summary.slice(0, 500) : older.map(s => (s.summary || '').split(/(?<=\.)\s/)[0]).filter(Boolean).join(' '))); }
+  if (older.length && !full) { const t = older.map(s => s.title).join(', '); H.push(`R${ci + 1}, wcześniej: ` + older.map(s => `${s.title}: ${(s.summary || '').split(/(?<=\.)\s/)[0]}`).filter(x => !/:\s*$/.test(x)).join(' | ')); }
   last.forEach(s => { if (s.summary) H.push(`R${ci + 1}, ${s.title}: ${s.summary}`); });
   if (H.length) B.push('## HISTORIA DOTĄD\n' + H.join('\n'));
   const evs = relevantEvents(p, sc, present, full ? 24 : ideas ? 6 : 10);
@@ -1069,12 +1070,14 @@ function memoryBlock(p, sc, present, mode = 'full') {
   const head = full ? '# PAMIĘĆ OPOWIEŚCI' : '# PAMIĘĆ OPOWIEŚCI\nTo jest tło do pilnowania spójności, a nie lista rzeczy do wpisania. Użyj tylko tego, czego wymaga plan sceny. Reszty nie wspominaj, nie streszczaj i nie nawiązuj do wszystkiego naraz.';
   return head + '\n\n' + B.join('\n\n');
 }
+// końcówka tekstu zaczynająca się od początku zdania (albo przynajmniej od całego słowa), nie od połowy wyrazu
+function tailCut(t, n) { if (t.length <= n) return t; let x = t.slice(-n); const m = x.search(/[.!?…]\s+\S|\n\S/); if (m > -1 && m < n * 0.4) return x.slice(m + 1).trimStart(); const w = x.indexOf(' '); return w > -1 ? x.slice(w + 1) : x; }
 function buildWriterMessages(p, sc, mode, extra = {}) {
   const present = sc.who || [];
   const parts = [memoryBlock(p, sc, present, mode === 'ideas' ? 'ideas' : 'scene')];
   const prev = scenesBefore(p, sc).filter(x => x.s.text).slice(-1)[0];
   const jump = sc.cont === 'jump';
-  if (prev && (!jump || mode !== 'scene')) parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + prev.s.text.slice(mode === 'ideas' ? -700 : -900));
+  if (prev && (!jump || mode !== 'scene')) parts.push('# KONIEC POPRZEDNIEJ SCENY (dla ciągłości, nie kopiuj konstrukcji)\n…' + tailCut(prev.s.text, mode === 'ideas' ? 700 : 900));
   if (prev?.s.endState) parts.push('# STAN ŚWIATA NA KOŃCU POPRZEDNIEJ SCENY (kto gdzie jest; trzymaj się tego)\n' + prev.s.endState);
   const ends = lastEndings(p, sc);
   const starts = lastOpenings(p, sc);
@@ -1114,7 +1117,8 @@ Format odpowiedzi:
 TYTUŁ :: plan sceny w 2–3 zdaniach
 Bez numeracji i bez komentarzy.`);
   }
-  return [{ role: 'system', content: WRITER_SYS }, { role: 'user', content: parts.join('\n\n') }];
+  const sys = mode === 'ideas' ? WRITER_SYS.replace('- Zwracasz wyłącznie tekst prozy. Bez tytułu, bez komentarzy, bez markdown.', '- W tym zadaniu nie piszesz prozy: zwracasz fakty i pomysły dokładnie w formacie podanym w ZADANIU.') : WRITER_SYS;
+  return [{ role: 'system', content: sys }, { role: 'user', content: parts.join('\n\n') }];
 }
 
 const EDITOR_SYS = `Jesteś korektorem i redaktorem językowym polskiej prozy. Poprawiasz WYŁĄCZNIE:
@@ -1488,7 +1492,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.8 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.9 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -2198,7 +2202,7 @@ A.editChar = id => {
     ${f('description', 'Kim jest', 'Wiek, wygląd, charakter, sytuacja', 1)}${f('motivation', 'Motywacja', 'Czego chce i czego się boi', 1)}
     ${f('voice', 'Sposób mówienia', 'Krótko, ironicznie, unika pytań wprost', 1)}${f('relations', 'Relacje', 'Z kim i jak', 1)}
     ${f('knows', 'Wie (jedna rzecz w linii)', 'Uzupełnia się po scenach', 1)}${f('unknown', 'Nie wie', 'Sekrety, których ta postać nie zna', 1)}
-    ${f('changes', 'Co się z nią już stało (jedna rzecz w linii)', 'Uzupełnia się po scenach', 1)}
+    ${f('changes', 'Co już się wydarzyło w życiu tej postaci (jedna rzecz w linii)', 'Uzupełnia się po scenach', 1)}
     ${f('arc', 'Plan na przyszłość (jeszcze się NIE wydarzyło)', 'Np. W R3 siada w M4 Kacpra i jeździ lepiej od niego, ale tego nie zauważa', 1)}
     <span class="hint">Planów nie wpisuj do „Co się już stało”: model potraktuje je jak fakty. Tu wpisz kierunek, w którym postać ma iść.</span>
     ${id ? `<button class="btn" data-a="consolidate" data-id="${id}">Uporządkuj „Wie” i „Co się już stało”</button>` : ''}
