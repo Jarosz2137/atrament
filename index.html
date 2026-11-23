@@ -740,6 +740,8 @@ async function llm(role, messages, opt = {}) {
 const isManual = role => S.settings.roles[role]?.provider === 'manual';
 // kontrola i poprawki realiów: gdy pisarz jest „przez czat”, a redaktor ma API, analiza idzie automatycznie przez redaktora
 const analysisRole = () => isManual('writer') && !isManual('editor') ? 'editor' : 'writer';
+// wprowadzanie gotowych poprawek to proste zadanie: robi je tani model od pamięci, żeby mocniejszy (często z małym limitem) tylko analizował
+const fixRole = () => !isManual('memory') ? 'memory' : analysisRole();
 let MANUAL_Q = Promise.resolve(), MANUAL = null;
 function manualPrompt(role, messages, opt) {
   const sys = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
@@ -1500,7 +1502,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.11 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.12 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1842,7 +1844,7 @@ A.applyFacts = async () => {
   const list = sel.map((i, k) => `${k + 1}. ${i.quote ? '„' + i.quote + '”: ' : ''}${i.problem}${i.fix ? ' → ' + i.fix : ''}`).join('\n');
   const user = `${(p.style.facts || '').trim() ? 'REALIA:\n' + p.style.facts.trim() + '\n\n' : ''}PROBLEMY DO NAPRAWIENIA:\n${list}\n\nSCENA:\n${orig}\n\nPopraw WYŁĄCZNIE miejsca związane z powyższymi problemami, minimalną zmianą (możesz dopisać krótkie zdanie wyjaśnienia, jeśli jest potrzebne). Reszta tekstu ma zostać słowo w słowo. Zachowaj podział na akapity. Zwróć cały tekst sceny i nic więcej.`;
   let r;
-  try { r = await llm(analysisRole(), [{ role: 'system', content: 'Jesteś redaktorem merytorycznym polskiej prozy. Wprowadzasz tylko wskazane poprawki.' }, { role: 'user', content: user }], { temp: 0.3 }); }
+  try { r = await llm(fixRole(), [{ role: 'system', content: 'Jesteś redaktorem merytorycznym polskiej prozy. Wprowadzasz tylko wskazane poprawki.' }, { role: 'user', content: user }], { temp: 0.3 }); }
   catch (err) { setSheet(`<div class="banner bad">${esc(err.message)}</div>`); throw err; }
   const fixed = cleanOutput(r.text), segs = diffHunks(orig, fixed), n = segs.filter(x => x.eq == null).length;
   S.ui = { segs, orig };
