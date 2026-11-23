@@ -1466,7 +1466,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.4 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.5 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1862,7 +1862,8 @@ Drobne niedopowiedzenia, które da się naturalnie dopisać w scenie, nie są b�
 Zwróć JSON: {"verdicts":[{"n":1,"ok":true,"problem":"jeśli ok=false: krótko, co się nie zgadza"}]} dla wszystkich ${ideas.length} propozycji.`;
   const r = await llm(criticRole(), [{ role: 'system', content: CRITIC_SYS }, { role: 'user', content: user }], { json: true, temp: 0.1, maxTokens: 3000 });
   const d = parseJSON(r.text);
-  const v = Array.isArray(d?.verdicts) ? d.verdicts : [];
+  if (!Array.isArray(d?.verdicts)) throw new UserError('krytyk zwrócił odpowiedź, której nie umiem odczytać (to nie był poprawny JSON).');
+  const v = d.verdicts;
   ideas.forEach((x, i) => { const z = v.find(y => Number(y?.n) === i + 1); if (z && z.ok === false) x.bad = String(z.problem || 'niezgodne z kanonem'); });
   return r.usage;
 }
@@ -1874,18 +1875,29 @@ A.ideas = async () => {
   const r = await llm('writer', buildWriterMessages(p, sc, 'ideas', { n: useCritic ? 8 : 5 }), { temp: cheap ? Math.min(0.8, S.settings.roles.writer.temp) : Math.min(1.0, S.settings.roles.writer.temp + 0.15) }).catch(e => { setSheet(`<div class="banner bad">${esc(e.message)}</div>`); throw e; });
   let ideas = parseIdeas(r.text);
   if (!ideas.length) return setSheet(`<div class="banner warn">Model nie zwrócił pomysłów w oczekiwanym formacie.</div><pre class="ctx">${esc(r.text)}</pre>`);
-  let cu = null, criticFailed = false;
+  let cu = null, criticFailed = '';
   if (useCritic) {
     setSheet(loader('Krytyk sprawdza pomysły z kanonem: kto gdzie jest, kto co wie…'));
-    try { cu = await criticIdeas(p, sc, ideas); } catch (e) { if (e.name === 'AbortError') { closeSheet(); return; } criticFailed = true; }
+    try { cu = await criticIdeas(p, sc, ideas); } catch (e) { if (e.name === 'AbortError') { closeSheet(); return; } criticFailed = (e.message || String(e)).slice(0, 300); }
   }
+  renderIdeas(ideas, r.usage, cu, criticFailed);
+};
+function renderIdeas(ideas, usage, cu, criticFailed) {
   const good = ideas.filter(x => !x.bad).slice(0, 5), bad = ideas.filter(x => x.bad);
   S.ui = { ideas: [...good, ...bad] };
   const card = (x, i) => `<div class="variant"><h3>${esc(x.t)}</h3><p>${esc(x.p)}</p>${x.bad ? `<p class="hint">Krytyk: ${esc(x.bad)}</p>` : ''}<button class="btn sm ${x.bad ? '' : 'primary'}" data-a="useIdea" data-id="${i}">Użyj jako planu</button></div>`;
-  setSheet((criticFailed ? '<div class="banner warn small">Krytyk nie odpowiedział, pokazuję pomysły bez sprawdzenia.</div>' : '')
+  setSheet((criticFailed ? `<div class="banner warn small"><div>Krytyk (${esc(S.settings.roles[criticRole()]?.model || '')}) nie odpowiedział, pokazuję pomysły bez sprawdzenia. Powód: ${esc(criticFailed)}</div><div><button class="btn sm" data-a="recritic">Sprawdź jeszcze raz</button></div></div>` : '')
     + (good.length ? good.map(card).join('') : '<div class="banner warn">Krytyk odrzucił wszystkie pomysły. Niżej są z uzasadnieniem, możesz któryś poprawić ręcznie.</div>')
     + (bad.length ? `<details class="card"><summary class="label">Odrzucone przez krytyka (${bad.length})</summary>${bad.map((x, k) => card(x, good.length + k)).join('')}</details>` : '')
-    + `<span class="hint mono">${esc(usageLine(r.usage))}${cu ? ' · krytyk: ' + esc(usageLine(cu)) : ''}</span>`);
+    + `<span class="hint mono">${(usage ? esc(usageLine(usage)) : '')}${cu ? ' · krytyk: ' + esc(usageLine(cu)) : ''}</span>`);
+}
+A.recritic = async () => {
+  const sc = curScene(), p = S.project, all = (S.ui.ideas || []).map(x => ({ t: x.t, p: x.p }));
+  if (!all.length) return;
+  setSheet(loader('Krytyk sprawdza pomysły z kanonem…'));
+  let cu = null, err = '';
+  try { cu = await criticIdeas(p, sc, all); } catch (e) { if (e.name === 'AbortError') return closeSheet(); err = (e.message || String(e)).slice(0, 300); }
+  renderIdeas(all, null, cu, err);
 };
 A.useIdea = i => {
   const x = S.ui.ideas?.[i]; const sc = curScene(); if (!x || !sc) return;
