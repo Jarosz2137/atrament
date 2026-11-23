@@ -624,10 +624,12 @@ async function applyEngine() {
   const st = S.settings, E = ENGINES[st.engine] || ENGINES.claude, M = curEngineModel();
   const slots = [M.m, M.free ? E.freeEditor : (M.cheap && E.cheapEditor) || E.editor, M.free ? E.freeEditor : E.memory];
   ['writer', 'editor', 'memory'].forEach((role, i) => { st.roles[role].provider = E.prov; st.roles[role].model = slots[i][0]; });
+  if (st.memoryVia === 'chat') { st.roles.memory.provider = 'manual'; st.roles.memory.model = 'claude'; }
   if (E.prov === 'manual' && st.manualHelpers && st.manualHelpers !== 'manual') {
     const H = { claude: ['anthropic', 'claude-haiku-5-5'], openai: ['openai', 'gpt-6-luna'], gemini: ['gemini', 'gemini-3.1-flash-lite'] }[st.manualHelpers];
     if (H) ['editor', 'memory'].forEach(role => { st.roles[role].provider = H[0]; st.roles[role].model = H[1]; });
   }
+  if (st.memoryVia === 'chat') { st.roles.memory.provider = 'manual'; st.roles.memory.model = 'claude'; }
   if (E.prov === 'openrouter') st.denyTraining = !M.free;
   saveSettings(); render();
   if (E.prov === 'openai' || E.prov === 'gemini') {
@@ -1460,6 +1462,10 @@ function viewSettings() {
     ${E.prov === 'manual' ? `<label class="field"><span>Redakcja i pamięć</span><select id="manualHelpers" data-f="settings.manualHelpers">
       ${[['manual', 'Też ręcznie przez czat'], ['claude', 'Claude Haiku przez API (grosze)'], ['openai', 'GPT-6 Luna przez API (grosze)'], ['gemini', 'Gemini Flash-Lite przez API']].map(([v, l]) => `<option value="${v}" ${(st.manualHelpers || 'manual') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       ${st.manualHelpers && st.manualHelpers !== 'manual' ? keyInput({ claude: 'anthropic', openai: 'openai', gemini: 'gemini' }[st.manualHelpers]) : ''}` : keyInput(E.prov)}
+    <label class="field"><span>Aktualizacja pamięci po scenie</span><select id="memoryVia" data-f="settings.memoryVia">
+      <option value="api" ${st.memoryVia !== 'chat' ? 'selected' : ''}>Automatycznie przez API</option>
+      <option value="chat" ${st.memoryVia === 'chat' ? 'selected' : ''}>Przez czat: kopiuj-wklej do ${esc((MANUAL_SITES[st.pick?.manual] || MANUAL_SITES.claude).name)}</option></select>
+      <span class="hint">Przez czat archiwista pokaże prompt do wklejenia (np. w Claude z subskrypcji), a odpowiedź wkleisz z powrotem. Gdy model od pamięci jest też zapasem dla redakcji, w trybie czatu zapas się wyłącza.</span></label>
     <div class="meta-line mono"><span>Pisze: ${esc(R.writer.model || '—')}</span><span>Redaguje: ${esc(R.editor.model || '—')}</span><span>Pamięć: ${esc(R.memory.model || '—')}</span></div>
     <span class="hint">${esc(E.note)}</span>
     <button class="btn" data-a="testConn">Sprawdź połączenie</button>
@@ -1508,7 +1514,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.14 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.15 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
@@ -1545,7 +1551,7 @@ document.addEventListener('input', e => {
     document.querySelectorAll('[data-a="editorPass"],[data-a="factCheck"],[data-a="endings"],[data-a="continue"],[data-a="accept"]').forEach(b => { b.disabled = !has; });
   }
   if (scope === 'settings' || scope.startsWith('role_')) {
-    if (scope === 'settings' && key === 'manualHelpers') { saveSettings(); applyEngine(); return; }
+    if (scope === 'settings' && (key === 'manualHelpers' || key === 'memoryVia')) { saveSettings(); applyEngine(); return; }
     saveSettings();
     if (scope === 'settings' && key === 'ghToken') { S.settings.gistId = ''; const b = $('[data-a="syncNow"]'); if (b) b.disabled = !v.trim(); setSyncState(''); }
     if (scope === 'settings' && /Key$/.test(key)) { clearTimeout(ctxT); ctxT = setTimeout(() => { const E = ENGINES[S.settings.engine]; if (E && PROVIDERS[E.prov].keyField === key && (E.prov === 'openai' || E.prov === 'gemini')) applyEngine(); }, 900); }
