@@ -833,7 +833,19 @@ async function llmRaw(role, messages, opt = {}) {
   }
   // Gemini nadal przeciążony: spróbuj darmowej Gemmy w tym samym API
   if (r.provider === 'gemini' && [500, 503, 529].includes(res.status)) {
-    for (const alt of ['gemma-4-31b-it', 'gemma-4-26b-a4b-it']) {
+    // zapasowe modele bierzemy z listy, którą klucz naprawdę widzi (nazwy u Google się zmieniają)
+    let alts = [];
+    try {
+      if (!S.geminiAlts) {
+        const lr = await fetch(base + '/models', { headers: { Authorization: headers.Authorization } });
+        const ids = lr.ok ? ((await lr.json()).data || []).map(m => String(m.id).replace(/^models\//, '')) : [];
+        const score = id => (/flash-lite/.test(id) ? 3 : /gemma/.test(id) ? 2 : /flash/.test(id) ? 1 : 0) * 100 + (parseFloat((id.match(/(\d+(?:\.\d+)?)/) || [])[1]) || 0);
+        S.geminiAlts = ids.filter(id => /flash-lite|gemma-\d.*-it$|flash$/.test(id) && !/preview|exp|tts|image|audio|live|embedding/.test(id)).sort((x, y) => score(y) - score(x));
+      }
+      alts = S.geminiAlts.filter(id => id !== body.model).slice(0, 3);
+    } catch {}
+    if (!alts.length) alts = ['gemma-4-31b-it', 'gemma-4-26b-a4b-it'];
+    for (const alt of alts) {
       if (alt === body.model) continue;
       const res2 = await send({ ...body, model: alt });
       if (res2.ok) { res = res2; toast(`${r.model} przeciążony, tym razem odpowiedziała ${alt}.`); break; }
@@ -1476,7 +1488,7 @@ function viewSettings() {
     <span class="hint">iOS potrafi wyczyścić dane apki, której długo nie otwierasz. Rób kopię co jakiś czas (bez kluczy API).</span>
     <div class="row"><button class="btn grow" data-a="exportBackup">Zapisz kopię</button><button class="btn grow" data-a="importBackup">Wczytaj kopię</button></div>
   </div>
-  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.7 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
+  <p class="hint mono">Atrament by Egzey DevCorp · wersja 1.11.8 · wydane: $${(st.spent || 0).toFixed(4)}</p>`;
 }
 
 /* ============================== Edycja pól ============================== */
