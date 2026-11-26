@@ -2981,11 +2981,91 @@ async function removeLocal(pid) {
   }
   return false;
 }
+/* Scalanie: ta sama opowieść zmieniona na dwóch urządzeniach. syncBase = odciski elementów z ostatniej synchronizacji. */
+function hashStr(s) { let a = 0xdeadbeef, b = 0x41c6ce57; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = Math.imul(a ^ c, 2654435761); b = Math.imul(b ^ c, 1597334677); } a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909); b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909); return (4294967296 * (2097151 & b) + (a >>> 0)).toString(36); }
+const hOf = x => hashStr(JSON.stringify(x ?? null));
+const SKIP_TOP = new Set(['id', 'chapters', 'characters', 'events', 'threads', 'dataset', 'syncRev', 'syncSig', 'syncBase', 'dirty', 'updated', 'created', 'currentChapter']);
+const LISTS = ['characters', 'events', 'threads'];
+const chapMeta = c => { const { scenes, ...m } = c; return m; };
+function makeBase(p) {
+  const b = {};
+  for (const k of Object.keys(p)) if (!SKIP_TOP.has(k)) b['top:' + k] = hOf(p[k]);
+  for (const k of LISTS) for (const x of p[k] || []) b[k + ':' + x.id] = hOf(x);
+  for (const c of p.chapters || []) { b['chap:' + c.id] = hOf(chapMeta(c)); for (const s of c.scenes) b['scene:' + s.id] = hOf({ ...s, _ch: c.id }); }
+  return b;
+}
+function orderMerge(L, R, keep) {
+  const out = R.filter(id => keep.has(id)), placed = new Set(out);
+  let prev = null;
+  for (const id of L) {
+    if (keep.has(id) && !placed.has(id)) { const i = prev ? out.indexOf(prev) + 1 : 0; out.splice(i, 0, id); placed.add(id); }
+    if (placed.has(id)) prev = id;
+  }
+  return out;
+}
+function mergeProjects(local, remote) {
+  const base = local.syncBase || null, localNewer = (local.updated || 0) > (remote.updated || 0);
+  // 'l' = bierz lokalną, 'r' = zdalną, 'both' = zmienione po obu stronach
+  const side = (key, l, r) => { const lh = hOf(l), rh = hOf(r); if (lh === rh) return 'r'; const b = base?.[key]; if (b === rh) return 'l'; if (b === lh) return 'r'; return 'both'; };
+  const m = JSON.parse(JSON.stringify(remote));
+  let dup = 0;
+  for (const k of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+    if (SKIP_TOP.has(k)) continue;
+    const s = side('top:' + k, local[k], remote[k]);
+    if (s === 'l' || (s === 'both' && localNewer)) { if (local[k] === undefined) delete m[k]; else m[k] = JSON.parse(JSON.stringify(local[k])); }
+  }
+  // wybór wersji elementu, który istnieje po jednej albo obu stronach; null = usunięty
+  const choose = (key, l, r) => {
+    if (l && r) { const s = side(key, l, r); return s === 'l' || (s === 'both' && localNewer) ? { v: l, s } : { v: r, s }; }
+    if (l) return base?.[key] && base[key] === hOf(l) ? null : { v: l, s: 'l' };   // usunięty na drugim urządzeniu
+    if (r) return base?.[key] && base[key] === hOf(r) ? null : { v: r, s: 'r' };   // usunięty tutaj
+    return null;
+  };
+  for (const k of LISTS) {
+    const L = local[k] || [], R = remote[k] || [], Lm = new Map(L.map(x => [x.id, x])), Rm = new Map(R.map(x => [x.id, x])), win = new Map();
+    for (const id of new Set([...Lm.keys(), ...Rm.keys()])) { const c = choose(k + ':' + id, Lm.get(id), Rm.get(id)); if (c) win.set(id, c.v); }
+    m[k] = orderMerge(L.map(x => x.id), R.map(x => x.id), new Set(win.keys())).map(id => JSON.parse(JSON.stringify(win.get(id))));
+  }
+  // rozdziały i sceny (scena może zmienić rozdział)
+  const flat = p => { const mp = new Map(); for (const c of p.chapters || []) for (const s of c.scenes) mp.set(s.id, { ...s, _ch: c.id }); return mp; };
+  const Ls = flat(local), Rs = flat(remote), sceneWin = new Map(), extra = new Map();
+  for (const id of new Set([...Ls.keys(), ...Rs.keys()])) {
+    const l = Ls.get(id), r = Rs.get(id), c = choose('scene:' + id, l, r); if (!c) continue;
+    sceneWin.set(id, c.v);
+    if (c.s === 'both' && (l.text || '') !== (r.text || '') && l.text && r.text) {
+      const lose = c.v === l ? r : l;
+      extra.set(id, { ...JSON.parse(JSON.stringify(lose)), id: uid('s'), title: (lose.title || 'Scena') + ' (druga wersja)', status: 'draft' }); dup++;
+    }
+  }
+  const Lc = new Map((local.chapters || []).map(c => [c.id, c])), Rc = new Map((remote.chapters || []).map(c => [c.id, c])), chapWin = new Map();
+  for (const id of new Set([...Lc.keys(), ...Rc.keys()])) {
+    const l = Lc.get(id), r = Rc.get(id);
+    const c = choose('chap:' + id, l && chapMeta(l), r && chapMeta(r));
+    const hasScenes = [...sceneWin.values()].some(s => s._ch === id);
+    if (c) chapWin.set(id, c.v); else if (hasScenes) chapWin.set(id, chapMeta(l || r)); // nie gub rozdziału z nowymi scenami
+  }
+  const chOrder = orderMerge([...Lc.keys()], [...Rc.keys()], new Set(chapWin.keys()));
+  m.chapters = chOrder.map(cid => {
+    const keep = new Set([...sceneWin].filter(([, s]) => s._ch === cid).map(([id]) => id));
+    const ids = orderMerge((Lc.get(cid)?.scenes || []).map(s => s.id), (Rc.get(cid)?.scenes || []).map(s => s.id), keep);
+    const scenes = [];
+    for (const id of ids) { const { _ch, ...s } = sceneWin.get(id); scenes.push(JSON.parse(JSON.stringify(s))); if (extra.has(id)) { const { _ch: x, ...e } = extra.get(id); scenes.push(e); } }
+    return { ...JSON.parse(JSON.stringify(chapWin.get(cid))), scenes };
+  });
+  if (!m.chapters.length) m.chapters = JSON.parse(JSON.stringify(remote.chapters));
+  if (!m.chapters.some(c => c.id === m.currentChapter)) m.currentChapter = local.currentChapter && m.chapters.some(c => c.id === local.currentChapter) ? local.currentChapter : m.chapters[0].id;
+  // dataset: suma bez duplikatów
+  const ds = { sft: [], dpo: [], seq: Math.max(local.dataset?.seq || 0, remote.dataset?.seq || 0) };
+  for (const kind of ['sft', 'dpo']) { const seen = new Set(); for (const e of [...(remote.dataset?.[kind] || []), ...(local.dataset?.[kind] || [])]) { const k = hOf(e); if (!seen.has(k)) { seen.add(k); ds[kind].push(e); } } ds[kind].sort((a, b) => (a.at || 0) - (b.at || 0)); }
+  m.dataset = ds;
+  m.updated = Date.now();
+  return { merged: m, dup };
+}
 async function syncNow({ quiet } = {}) {
   if (!S.settings?.ghToken || syncBusy) return;
   if (GEN) return scheduleSync(5000);
   syncBusy = true; setSyncState('sync');
-  let rerender = false, pulled = 0, pushed = 0, conflicts = 0;
+  let rerender = false, pulled = 0, pushed = 0, conflicts = 0, merges = 0;
   try {
     // najpierw zapisz to, co czeka w kolejce zapisu
     if (saveT) { clearTimeout(saveT); saveT = null; await DB.set('p:' + S.project.id, S.project); upsertMeta(S.project); }
@@ -3013,12 +3093,6 @@ async function syncNow({ quiet } = {}) {
       if (meta.deleted) { if (has && !pendingDeleted.includes(pid)) { if (await removeLocal(pid)) rerender = true; pulled++; } continue; }
       const local = has ? (S.project?.id === pid ? S.project : await DB.get('p:' + pid)) : null;
       if (local && (meta.rev || 0) <= (local.syncRev || 0)) continue;
-      if (local && local.dirty) {
-        // ta sama opowieść zmieniona na dwóch urządzeniach: wersja z tego urządzenia zostaje jako kopia
-        const copy = JSON.parse(JSON.stringify(local));
-        Object.assign(copy, { id: uid('p'), title: local.title + ' (kopia z konfliktu)', syncRev: 0, dirty: true, updated: Date.now() });
-        await DB.set('p:' + copy.id, copy); upsertMeta(copy); conflicts++;
-      }
       const coreText = await gistFileText(files[`p-${pid}.json`]);
       if (!coreText) continue;
       const core = JSON.parse(coreText);
@@ -3034,6 +3108,13 @@ async function syncNow({ quiet } = {}) {
       delete core.dsSeq;
       const proj = migrate({ ...core, dataset: ds });
       Object.assign(proj, { syncRev: meta.rev || 0, syncSig: sig, dirty: false });
+      proj.syncBase = makeBase(proj);
+      if (local && local.dirty && hOf({ ...local, syncRev: 0, syncSig: 0, syncBase: 0, dirty: 0, updated: 0 }) !== hOf({ ...proj, syncRev: 0, syncSig: 0, syncBase: 0, dirty: 0, updated: 0 })) {
+        // ta sama opowieść zmieniona na dwóch urządzeniach: scal zmiany, wynik poleci z powrotem do chmury
+        const { merged, dup } = mergeProjects(migrate(local), proj);
+        Object.assign(proj, merged, { syncRev: meta.rev || 0, syncSig: sig, syncBase: proj.syncBase, dirty: true });
+        conflicts += dup; merges++;
+      }
       await DB.set('p:' + pid, proj); upsertMeta(proj);
       if (S.project?.id === pid) { S.project = proj; if (S.sceneId && !curScene()) S.sceneId = null; rerender = true; }
       pulled++;
@@ -3046,7 +3127,7 @@ async function syncNow({ quiet } = {}) {
       if (!p || p.sample) continue;
       const meta = idx.projects[p.id];
       if (meta && !meta.deleted && !p.dirty) continue;
-      const { dataset, syncRev, syncSig, dirty, ...core } = p;
+      const { dataset, syncRev, syncSig, syncBase, dirty, ...core } = p;
       core.dsSeq = dataset?.seq || 0;
       out[`p-${p.id}.json`] = { content: JSON.stringify(core) };
       const sig = {};
@@ -3054,7 +3135,7 @@ async function syncNow({ quiet } = {}) {
       for (const k of Object.keys(syncSig || {})) if (!(k in sig) && files[`d-${p.id}-${k}.json`]) out[`d-${p.id}-${k}.json`] = null;
       const rev = (meta?.rev || 0) + 1;
       idx.projects[p.id] = { title: p.title, rev, at: Date.now() }; idxChanged = true;
-      snaps.push({ p, rev, sig, updated: p.updated });
+      snaps.push({ p, rev, sig, updated: p.updated, base: makeBase(p) });
     }
 
     for (const [n, v] of Object.entries(out)) if (v === null && !files[n]) delete out[n];
@@ -3062,7 +3143,7 @@ async function syncNow({ quiet } = {}) {
       out[INDEX] = { content: JSON.stringify(idx) };
       await gh('/gists/' + gid, { method: 'PATCH', body: JSON.stringify({ files: out }) });
       for (const sn of snaps) {
-        Object.assign(sn.p, { syncRev: sn.rev, syncSig: sn.sig });
+        Object.assign(sn.p, { syncRev: sn.rev, syncSig: sn.sig, syncBase: sn.base });
         if (sn.p.updated === sn.updated) sn.p.dirty = false; // zmiany wpisane w trakcie synchronizacji polecą następnym razem
         await DB.set('p:' + sn.p.id, sn.p);
       }
@@ -3073,7 +3154,7 @@ async function syncNow({ quiet } = {}) {
     S.settings.lastSync = Date.now(); saveSettings();
     setSyncState('ok');
     if (rerender && !GEN) render(); else if ($('#projName') && S.project) $('#projName').textContent = S.project.title;
-    if (conflicts) toast(`Ta sama opowieść była zmieniona na dwóch urządzeniach. Twoja wersja z tego urządzenia jest zapisana jako „kopia z konfliktu”.`, true);
+    if (conflicts) toast(conflicts === 1 ? 'Scalono zmiany z drugiego urządzenia. Jedna scena była edytowana na obu, jej druga wersja leży obok jako „(druga wersja)”.' : `Scalono zmiany z drugiego urządzenia. ${conflicts} sceny były edytowane na obu, ich drugie wersje leżą obok jako „(druga wersja)”.`);
     else if (!quiet) toast(pulled || pushed ? `Zsynchronizowano: pobrano ${pulled}, wysłano ${pushed}.` : 'Wszystko aktualne.');
   } catch (e) {
     setSyncState('err');
@@ -3114,7 +3195,7 @@ function migrate(p) {
   render();
   try { navigator.storage?.persist?.(); } catch {}
   syncNow({ quiet: true });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow({ quiet: true }); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow({ quiet: true }); else if (S.project?.dirty) syncNow({ quiet: true }); }); // wysyłaj zmiany przy wyjściu z apki, żeby drugie urządzenie miało świeżą wersję
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); });
