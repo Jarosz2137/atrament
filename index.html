@@ -519,6 +519,70 @@ input.scene-title { font-style: italic; font-size: 32px; letter-spacing: -.02em;
 .toggle input[type=checkbox]:checked { box-shadow: 0 0 14px -2px var(--g2); }
 .book { background: var(--surface); }
 
+/* ===== Czytnik książki ===== */
+.read-bar { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 61px); z-index: 6; margin: -6px -4px 0; padding: 8px 4px; background: color-mix(in srgb, var(--bg) 70%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5); border-radius: 0 0 16px 16px; }
+.read-bar .toc-jump { position: static; flex-wrap: nowrap; }
+.read-bar select { min-width: 0; }
+.read-prog { position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.read-prog i { display: block; height: 100%; width: 0; background: var(--grad); box-shadow: 0 0 10px var(--g2); }
+.btn.icon { width: 42px; padding: 0; font-size: 18px; flex: none; }
+.rt { display: flex; gap: 5px; flex: none; }
+.rt .sw { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 1px solid var(--line-strong); padding: 0; transition: transform .15s var(--ease), box-shadow .2s; }
+.rt .sw-paper { background: #FBF8F1; } .rt .sw-sepia { background: #EEDFC0; } .rt .sw-night { background: #16161B; }
+.rt .sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--g2); }
+.rt .sw:active { transform: scale(.9); }
+.rsz { display: flex; flex: none; border: 1px solid var(--line-strong); border-radius: 11px; overflow: hidden; background: var(--surface); }
+.rsz button { border: 0; background: none; cursor: pointer; width: 32px; height: 40px; font-family: var(--prose); color: var(--fg); }
+.rsz button:first-child { font-size: 13px; border-right: 1px solid var(--line); } .rsz button:last-child { font-size: 19px; }
+@media (max-width: 400px) { .rt .sw { width: 22px; height: 22px; } .rsz button { width: 28px; } }
+
+.book.reader {
+  --bk-bg: #FBF8F1; --bk-fg: #201D18; --bk-mut: #8C8374; --bk-acc: #4B3BC4; --bk-line: rgb(32 29 24 / .14);
+  background: var(--bk-bg); color: var(--bk-fg); border: 0; border-radius: 4px 4px 4px 4px;
+  font-size: var(--bk-size, 19px); line-height: 1.68; padding: clamp(36px, 8vw, 72px) clamp(24px, 7vw, 64px) 80px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / .5) inset, 0 2px 0 -1px var(--bk-bg), 0 3px 0 -1px rgb(0 0 0 / .12), 0 6px 0 -3px var(--bk-bg), 0 7px 0 -3px rgb(0 0 0 / .1), 0 30px 70px -25px rgb(0 0 0 / .6);
+  position: relative; transition: background-color .35s, color .35s; margin-top: 6px;
+}
+.book.reader::before { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; opacity: .35; mix-blend-mode: multiply;
+  background: linear-gradient(90deg, rgb(0 0 0 / .05), transparent 4%, transparent 96%, rgb(0 0 0 / .05)), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .45 0 0 0 0 .35 0 0 0 .12 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.book.reader[data-rt="sepia"] { --bk-bg: #F1E5CA; --bk-fg: #3A2D1E; --bk-mut: #8F7A58; --bk-acc: #9A4E22; --bk-line: rgb(58 45 30 / .18); }
+.book.reader[data-rt="night"] { --bk-bg: #16161B; --bk-fg: #D8D4CB; --bk-mut: #7E796F; --bk-acc: #B7A3FF; --bk-line: rgb(255 255 255 / .1);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / .06), 0 30px 70px -25px rgb(0 0 0 / .9); }
+.book.reader[data-rt="night"]::before { mix-blend-mode: screen; opacity: .12; }
+.book.reader > * { position: relative; }
+.book.reader p { text-indent: 1.5em; }
+.book.reader ::selection { background: color-mix(in srgb, var(--bk-acc) 25%, transparent); }
+
+/* strona tytułowa */
+.book.reader .front { min-height: 70vh; justify-content: center; padding: 30px 0 90px; gap: 14px; border-bottom: 1px solid var(--bk-line); margin-bottom: 20px; }
+.book.reader .front .orn, .book.reader .chap-orn { height: 14px; margin: 0 auto; width: 120px; color: var(--bk-acc);
+  background: linear-gradient(currentColor, currentColor) left 50% / 44px 1px no-repeat, linear-gradient(currentColor, currentColor) right 50% / 44px 1px no-repeat,
+  radial-gradient(circle, currentColor 0 3px, transparent 3.5px) center / 14px 14px no-repeat; opacity: .8; }
+.book.reader .front h1 { font-family: var(--display); font-style: italic; font-weight: 400; font-size: clamp(42px, 11vw, 68px); line-height: .98; letter-spacing: -.02em; margin-top: 10px; }
+.book.reader .front .sub { color: var(--bk-mut); font-size: .95em; }
+.book.reader .front .auth { color: var(--bk-fg); margin-top: 34px; font-size: 12px; letter-spacing: .32em; }
+.book.reader .dedic, .book.reader .motto { color: var(--bk-mut); }
+.book.reader .motto .msrc { font-style: normal; font-size: .85em; letter-spacing: .04em; }
+.book.reader .part { font-family: var(--display); font-style: italic; font-size: clamp(34px, 9vw, 48px); padding: 90px 0; }
+.book.reader .part span { display: inline-block; padding: 0 18px; border-top: 1px solid var(--bk-line); border-bottom: 1px solid var(--bk-line); padding: 14px 22px; }
+
+/* otwarcie rozdziału */
+.book.reader h2 { color: var(--bk-acc); font-family: var(--ui); font-size: 11px; font-weight: 600; letter-spacing: .34em; margin: 110px 0 14px; scroll-margin-top: 140px; }
+.book.reader .front + h2, .book.reader .dedic + h2, .book.reader .motto + h2 { margin-top: 60px; }
+.book.reader .chap-sub { font-family: var(--display); font-style: italic; font-size: clamp(34px, 9vw, 46px); line-height: 1.05; letter-spacing: -.015em; margin: 0 0 18px; }
+.book.reader .chap-orn { margin-bottom: 40px; }
+.book.reader h2 + .chap-orn { margin-top: 6px; }
+.book.reader p.first { text-indent: 0; }
+.book.reader p.first::first-line { font-variant: small-caps; letter-spacing: .06em; }
+.book.reader p.drop::first-letter {
+  float: left; font-family: var(--display); font-weight: 400; font-style: normal; color: var(--bk-acc);
+  font-size: 4.3em; line-height: .78; padding: .07em .1em 0 0; margin-left: -.03em;
+}
+.book.reader .sep { color: var(--bk-acc); margin: 30px 0; letter-spacing: .5em; opacity: .75; }
+.book.reader .fin { text-align: center; color: var(--bk-acc); font-size: 26px; margin-top: 60px; opacity: .8; }
+.book .orn, .book .chap-orn, .book .fin { display: none; }
+.book.reader .orn, .book.reader .chap-orn, .book.reader .fin { display: block; }
+
 #print { display: none; }
 @media print {
   @page { size: A5; margin: 18mm 16mm 20mm; }
@@ -1846,7 +1910,8 @@ A.openProjects = () => {
   const list = S.projects.map(x => `<div class="item"><div class="body"><span class="t">${esc(x.title)}</span><span class="small muted">${new Date(x.updated).toLocaleDateString('pl-PL')}</span></div><div class="side row">
      ${x.id === S.project?.id ? '<span class="tag ok">otwarty</span>' : `<button class="btn sm" data-a="openProject" data-id="${x.id}">Otwórz</button>`}
      <button class="btn sm danger" data-a="delProject" data-id="${x.id}">Usuń</button></div></div>`).join('');
-  openSheet('Opowieści', `<div class="list">${list || '<div class="empty">Brak</div>'}</div>
+  const nCopies = S.projects.filter(x => / \(kopia z konfliktu\)/.test(x.title)).length;
+  openSheet('Opowieści', `${nCopies ? `<div class="banner info"><div>Masz <b>${nCopies}</b> ${nCopies === 1 ? 'kopię' : 'kopii'} z konfliktu po starej synchronizacji. Sprzątanie przeniesie do oryginału sceny, których w nim brakuje, a potem usunie kopie.</div><button class="btn sm primary" data-a="cleanCopies">Posprzątaj kopie</button></div>` : ''}<div class="list">${list || '<div class="empty">Brak</div>'}</div>
     <label class="field"><span>Nowa opowieść</span><input type="text" id="newProjTitle" placeholder="Tytuł"></label>
     <button class="btn primary" data-a="createProject">Utwórz</button>`);
 };
@@ -1859,6 +1924,44 @@ A.createProject = async () => {
 A.openProject = async id => {
   const p = await DB.get('p:' + id); if (!p) return toast('Nie znaleziono projektu.', true);
   S.project = migrate(p); S.sceneId = null; S.settings.lastProject = id; saveSettings(); closeSheet(); S.view = 'write'; render();
+};
+A.cleanCopies = async (id, b) => {
+  if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Na pewno? Stuknij jeszcze raz'; return; }
+  b.disabled = true; b.innerHTML = '<span class="spinner"></span> Sprzątam…';
+  const COPY = / \(kopia z konfliktu\)/g;
+  let removed = 0, rescued = 0, kept = 0;
+  const all = [...S.projects];
+  for (const m of all.filter(x => / \(kopia z konfliktu\)/.test(x.title))) {
+    const base = m.title.replace(COPY, '');
+    const origMeta = all.find(x => x.title === base && S.projects.some(y => y.id === x.id));
+    if (!origMeta) { kept++; continue; } // brak oryginału: zostawiam, żeby nic nie zginęło
+    const copy = await DB.get('p:' + m.id);
+    const orig = S.project?.id === origMeta.id ? S.project : migrate(await DB.get('p:' + origMeta.id));
+    if (copy && orig) {
+      const have = new Set(orig.chapters.flatMap(c => c.scenes.map(s => s.id)));
+      const newIds = new Set();
+      for (const ch of copy.chapters || []) for (const s of ch.scenes || []) {
+        if (have.has(s.id) || !(s.text || '').trim()) continue;
+        const target = orig.chapters.find(c => c.id === ch.id) || orig.chapters[orig.chapters.length - 1];
+        target.scenes.push(JSON.parse(JSON.stringify(s))); have.add(s.id); newIds.add(s.id); rescued++;
+      }
+      if (newIds.size) {
+        const evIds = new Set(orig.events.map(e => e.id)), chIds = new Set(orig.characters.map(c => c.id));
+        for (const e of copy.events || []) if (newIds.has(e.sceneId) && !evIds.has(e.id)) orig.events.push(e);
+        const who = new Set([...copy.chapters.flatMap(c => c.scenes)].filter(s => newIds.has(s.id)).flatMap(s => s.who || []));
+        for (const c of copy.characters || []) if (who.has(c.id) && !chIds.has(c.id)) orig.characters.push(c);
+        orig.updated = Date.now(); orig.dirty = true;
+        await DB.set('p:' + orig.id, orig); upsertMeta(orig);
+        if (S.project?.id === orig.id) S.project = orig;
+      }
+    }
+    await DB.del('p:' + m.id); S.projects = S.projects.filter(x => x.id !== m.id); removed++;
+    if (S.settings.ghToken) S.settings.syncDeleted = [...(S.settings.syncDeleted || []), m.id];
+  }
+  if (S.project && !S.projects.some(x => x.id === S.project.id)) { S.project = migrate(await DB.get('p:' + S.projects[0].id)); S.sceneId = null; }
+  await DB.set('projects', S.projects); saveSettings(); scheduleSync(1500);
+  A.openProjects(); render();
+  toast(`Usunięto kopie: ${removed}.` + (rescued ? ` Przeniesiono do oryginału scen, których brakowało: ${rescued}.` : ' Oryginał miał już wszystkie sceny.') + (kept ? ` ${kept} zostawiłem, bo nie znalazłem oryginału.` : ''));
 };
 A.delProject = async (id, b) => {
   if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Na pewno?'; return; }
@@ -2769,18 +2872,19 @@ function bookStats(p) {
 
 function bookHtml(p) {
   const b = p.book, st = bookStructure(p);
-  let h = `<section class="front"><h1>${esc(p.title)}</h1>${b.subtitle ? `<div class="sub">${esc(b.subtitle)}</div>` : ''}${b.author ? `<div class="auth">${esc(b.author)}</div>` : ''}</section>`;
+  let h = `<section class="front"><div class="orn" aria-hidden="true"></div><h1>${esc(p.title)}</h1>${b.subtitle ? `<div class="sub">${esc(b.subtitle)}</div>` : ''}${b.author ? `<div class="auth">${esc(b.author)}</div>` : ''}</section>`;
   if (b.dedication.trim()) h += `<div class="dedic">${esc(b.dedication).replace(/\n/g, '<br>')}</div>`;
-  if (b.motto.trim()) h += `<div class="motto">${esc(b.motto).replace(/\n/g, '<br>')}${b.mottoSource ? `<br>— ${esc(b.mottoSource)}` : ''}</div>`;
+  if (b.motto.trim()) h += `<div class="motto">${esc(b.motto).replace(/\n/g, '<br>')}${b.mottoSource ? `<br><span class="msrc">— ${esc(b.mottoSource)}</span>` : ''}</div>`;
   for (const x of st) {
-    if (x.type === 'part') { h += `<div class="part">${esc(x.title)}</div>`; continue; }
-    h += `<h2 id="bk_${x.id}">${esc(x.label)}</h2>${x.title ? `<div class="chap-sub">${esc(x.title)}</div>` : ''}`;
+    if (x.type === 'part') { h += `<div class="part"><span>${esc(x.title)}</span></div>`; continue; }
+    h += `<h2 id="bk_${x.id}">${esc(x.label)}</h2>${x.title ? `<div class="chap-sub">${esc(x.title)}</div>` : ''}<div class="chap-orn" aria-hidden="true"></div>`;
     x.scenes.forEach((paras, i) => {
       if (i) h += `<div class="sep">${esc(b.sep)}</div>`;
-      h += paras.map(t => `<p>${esc(t)}</p>`).join('');
+      h += paras.map((t, j) => i === 0 && j === 0 ? `<p class="first${/^\p{L}/u.test(t) ? ' drop' : ''}">${esc(t)}</p>` : `<p>${esc(t)}</p>`).join('');
     });
   }
   if (!st.some(x => x.type === 'chapter')) h += `<p class="noind muted">Książka jest jeszcze pusta. Napisz pierwszą scenę.</p>`;
+  else h += `<div class="fin" aria-hidden="true">❦</div>`;
   return h;
 }
 
@@ -2788,9 +2892,13 @@ function viewBook() {
   const p = S.project, b = p.book;
   if (S.bookMode === 'read') {
     const st = bookStructure(p).filter(x => x.type === 'chapter');
-    return `<div class="row toc-jump"><button class="btn" data-a="bookMode" data-id="plan">← Plan książki</button>
-      <select class="grow" id="tocJump" aria-label="Spis treści"><option value="">Spis treści</option>${st.map(x => `<option value="${x.id}">${esc(x.label)}${x.title ? ' · ' + esc(x.title) : ''}</option>`).join('')}</select></div>
-      <article class="book" lang="pl">${bookHtml(p)}</article>`;
+    const rt = S.settings.readTheme || 'paper', rs = S.settings.readSize || 19;
+    return `<div class="read-bar"><div class="read-prog"><i id="readProg"></i></div>
+      <div class="row toc-jump"><button class="btn icon" data-a="bookMode" data-id="plan" aria-label="Plan książki">←</button>
+      <select class="grow" id="tocJump" aria-label="Spis treści"><option value="">Spis treści</option>${st.map(x => `<option value="${x.id}">${esc(x.label)}${x.title ? ' · ' + esc(x.title) : ''}</option>`).join('')}</select>
+      <div class="rt">${[['paper', 'Papier'], ['sepia', 'Sepia'], ['night', 'Noc']].map(([k, n]) => `<button class="sw sw-${k}" data-a="readTheme" data-id="${k}" aria-label="${n}" aria-pressed="${rt === k}"></button>`).join('')}</div>
+      <div class="rsz"><button data-a="readSize" data-id="-1" aria-label="Mniejszy tekst">A</button><button data-a="readSize" data-id="1" aria-label="Większy tekst">A</button></div></div></div>
+      <article class="book reader" data-rt="${rt}" style="--bk-size:${rs}px" lang="pl">${bookHtml(p)}</article>`;
   }
   const s = bookStats(p);
   const pct = Math.min(100, Math.round(s.words / Math.max(1, b.target) * 100));
@@ -2848,7 +2956,11 @@ function viewBook() {
   </div>`;
 }
 
-A.bookMode = m => { S.bookMode = m; render(); scrollTo(0, 0); };
+A.bookMode = m => { S.bookMode = m; render(); scrollTo(0, 0); readProgress(); };
+A.readTheme = k => { S.settings.readTheme = k; saveSettings(); $('.book.reader')?.setAttribute('data-rt', k); document.querySelectorAll('.rt .sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.id === k)); };
+A.readSize = d => { S.settings.readSize = Math.max(15, Math.min(26, (S.settings.readSize || 19) + Number(d))); saveSettings(); $('.book.reader')?.style.setProperty('--bk-size', S.settings.readSize + 'px'); };
+function readProgress() { const bk = $('.book.reader'), bar = $('#readProg'); if (!bk || !bar) return; const r = bk.getBoundingClientRect(), total = r.height - innerHeight + 200; bar.style.width = Math.max(0, Math.min(100, (-r.top + 120) / Math.max(1, total) * 100)) + '%'; }
+addEventListener('scroll', () => requestAnimationFrame(readProgress), { passive: true });
 A.gotoScene = id => { const ch = chapterOf(id); S.project.currentChapter = ch.id; S.sceneId = id; S.view = 'write'; saveProject(); render(); scrollTo(0, 0); };
 A.toggleInBook = id => { const sc = S.project.chapters.flatMap(c => c.scenes).find(s => s.id === id); sc.exclude = !sc.exclude; saveProject(); render(); };
 A.mvScene = arg => {
